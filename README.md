@@ -2,6 +2,11 @@
 
 A browser-based production workspace for creating and managing an ongoing AI-assisted Pathfinder comic.
 
+A small Rust/Dioxus web prototype is available for evaluating responsive panel
+editing, page composition, server-side saving, and image uploads. See
+[setup and prototype limits](docs/development/dioxus-prototype.md).
+This experiment does not implement the complete first milestone.
+
 The project is intended to replace a fragmented workflow based on chat history, Markdown files, prompts, reference images, and manually organized generated assets.
 
 The application should provide one place to plan the story, manage reusable visual models, construct comic panels, generate prompts, review generated images, and preserve story and visual consistency over time.

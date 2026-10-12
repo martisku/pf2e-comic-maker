@@ -1,0 +1,11 @@
+[workspace]
+members = ["crates/model", "crates/server", "crates/web"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+
+[workspace.dependencies]
+comic-model = { path = "crates/model" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

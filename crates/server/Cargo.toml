@@ -1,0 +1,15 @@
+[package]
+name = "comic-server"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+comic-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite"] }
+tower-http = { version = "0.6", features = ["fs", "limit"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+uuid = { version = "1", features = ["v4"] }
