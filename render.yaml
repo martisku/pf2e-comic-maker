@@ -7,7 +7,7 @@ services:
     region: frankfurt
     branch: main
     dockerfilePath: ./Dockerfile
-    autoDeployTrigger: off
+    autoDeployTrigger: 'off'
     healthCheckPath: /api/workspace
     envVars:
       - key: COMIC_BIND
