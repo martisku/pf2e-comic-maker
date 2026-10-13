@@ -7,6 +7,11 @@ editing, page composition, server-side saving, and image uploads. See
 [setup and prototype limits](docs/development/dioxus-prototype.md).
 This experiment does not implement the complete first milestone.
 
+Temporary Render Free hosting and automatic GitHub Actions deployment are
+configured in `render.yaml` and `.github/workflows/deploy.yml`. See
+[activation and demo limitations](docs/development/hosting.md). The free demo
+does not retain edits or uploaded images across restarts or deployments.
+
 The project is intended to replace a fragmented workflow based on chat history, Markdown files, prompts, reference images, and manually organized generated assets.
 
 The application should provide one place to plan the story, manage reusable visual models, construct comic panels, generate prompts, review generated images, and preserve story and visual consistency over time.

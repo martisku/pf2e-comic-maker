@@ -40,7 +40,11 @@ combination is not a single transaction.
 
 One native Rust process serves the API, compiled frontend, and images. It needs
 persistent writable storage. The default listener is loopback-only. Phone
-access requires a reachable server; no hosting, authentication, offline editing,
-or automatic cross-device refresh has been implemented.
+access requires a reachable server. A Docker image and Render Free deployment
+configuration now provide temporary internet hosting after account activation.
+GitHub Actions verifies the image before requesting deployment of the same
+commit. The free service's filesystem is ephemeral, so this is a disposable
+demo. Authentication, offline editing, and automatic cross-device refresh have
+not been implemented. See [hosting setup](../development/hosting.md).
 
 See [prototype setup and limits](../development/dioxus-prototype.md).
