@@ -1,0 +1,18 @@
+# Free demo only: SQLite and uploaded images are ephemeral on this plan.
+services:
+  - type: web
+    name: pf2e-comic-maker-demo
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    dockerfilePath: ./Dockerfile
+    autoDeployTrigger: 'off'
+    healthCheckPath: /api/workspace
+    envVars:
+      - key: COMIC_BIND
+        value: 0.0.0.0:10000
+      - key: COMIC_DATA_DIR
+        value: /app/data
+      - key: COMIC_PUBLIC_DIR
+        value: /app/public

@@ -1,0 +1,69 @@
+name: Verify and deploy to Render
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Test, lint, and build frontend and server
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: comic-prototype:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test the runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name comic-ci -p 127.0.0.1:10000:10000 comic-prototype:ci
+          trap 'docker logs comic-ci; docker rm -f comic-ci' EXIT
+          for attempt in {1..30}; do
+            if curl --silent --fail http://127.0.0.1:10000/api/workspace -o /tmp/workspace.json; then break; fi
+            sleep 1
+          done
+          jq -e '.revision == 0 and (.workspace.panels | length == 4)' /tmp/workspace.json
+          curl --silent --show-error --fail http://127.0.0.1:10000/ | grep -qi '<html'
+
+  deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Request deployment of the verified commit
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$RENDER_DEPLOY_HOOK_URL" ]]; then
+            echo '::error::Set the RENDER_DEPLOY_HOOK_URL repository secret. See docs/development/hosting.md.'
+            exit 1
+          fi
+          # Capture curl errors: its diagnostics can contain the secret URL.
+          if ! curl --silent --fail --connect-timeout 10 --max-time 60 \
+            --request POST --get --data-urlencode "ref=$GITHUB_SHA" \
+            "$RENDER_DEPLOY_HOOK_URL" -o /tmp/render-deploy.json 2>/tmp/render-deploy-error; then
+            echo '::error::Render rejected the deploy request. Check the hook and service settings.'
+            exit 1
+          fi
+          echo 'Render accepted the deploy request. Check the Render dashboard for build and live status.'
