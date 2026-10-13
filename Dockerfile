@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM rust:1-bookworm AS build
+FROM rust:1-trixie AS build
 WORKDIR /app
 
 # Optional CA mount is only needed in the managed development environment.
@@ -10,6 +10,7 @@ RUN --mount=type=secret,id=proxy_ca \
     curl ${SSL_CERT_FILE:+--cacert "$SSL_CERT_FILE"} -fsSL \
       https://github.com/DioxusLabs/dioxus/releases/download/v0.7.10/dx-x86_64-unknown-linux-gnu.tar.gz \
       | tar -xz -C /usr/local/bin dx
+RUN dx --version
 
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
@@ -26,7 +27,7 @@ RUN --mount=type=secret,id=proxy_ca \
     dx build --web --release --debug-symbols false --locked -p comic-web && \
     test -f /app/target/dx/comic-web/release/web/public/index.html
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 WORKDIR /app
 COPY --from=build /app/target/release/comic-server /app/comic-server
 COPY --from=build /app/target/dx/comic-web/release/web/public /app/public
