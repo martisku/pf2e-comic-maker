@@ -39,7 +39,8 @@ durable storage or a persistent server; that is outside this demo configuration.
    accepted the request, not that Render's build has finished or is live.
 
 The deploy hook includes `ref=<verified commit SHA>` to avoid deploying a newer,
-untested commit. Runs are serialized per branch and are not cancelled mid-deploy.
+untested commit. Main-branch runs are serialized and are not cancelled mid-deploy.
+Superseded pull-request verification runs are cancelled to conserve CI minutes.
 
 ## Local container verification
 
