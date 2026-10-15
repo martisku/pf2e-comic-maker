@@ -2,6 +2,10 @@
 
 Status: Draft
 
+Update 2026-10-15: the provisional SQLite/local-file hosting direction below is
+superseded by the selected [Neon PostgreSQL and object storage architecture](../architecture/hosting-and-storage.md).
+The rest of this milestone proposal remains a draft; migration is not implemented.
+
 ## Confirmed direction
 
 The user requested Rust as the base language, selected Dioxus to try, and

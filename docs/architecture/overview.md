@@ -1,5 +1,11 @@
 # Current architecture
 
+This page describes the implemented prototype. The selected next architecture
+uses Neon PostgreSQL and object storage, with no payment card and no persistent
+application disk. See [hosting and storage target architecture](hosting-and-storage.md)
+and [the storage decision](../decisions/0001-postgres-and-object-storage.md).
+That migration is not implemented; the card-free application host remains open.
+
 The repository now includes a small, explicitly authorized Dioxus web technical
 spike. The first milestone is still specified in requirements and is not fully
 implemented. The remaining stack decisions are in
