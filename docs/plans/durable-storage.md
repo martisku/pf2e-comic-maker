@@ -49,7 +49,7 @@ The shared model and four-panel UI can stay intact during this migration.
   source files and verify target bytes before publishing the imported workspace.
 - Runtime startup must not quietly create an empty database when config or
   migration is missing. CLI/config errors must not print credential values.
-- Readiness remains public but reveals no workspace data; authenticated routes
+- Process liveness remains public but reveals no workspace data; authenticated routes
   are private and not cached publicly. Browser writes validate Origin.
 
 ## Verification
@@ -84,6 +84,12 @@ a confirmed card-free native Rust host. All automated fixtures are disposable.
   They packaged the validated release artifacts using the Dockerfile's runtime
   stage. Full multistage rebuild and the automated container smoke script are
   also configured in GitHub Actions; their run status is recorded by CI.
+- The real import CLI also passed with a read-only source mount, preserving its
+  database digest and revision. The importing UID must be able to read private
+  source files; setup and CI now explicitly use the source owner's UID.
+- `/healthz` is process liveness without a database query, so periodic host
+  probes do not defeat database scale-to-zero. Startup checks the workspace;
+  actual API calls validate storage results before reporting success.
 - Sequential critical review added a regression for replay after later edits:
   replay must return a conflict rather than fast-forward stale browser text.
   It also confirmed the database-first abandonment barrier and retained cleanup

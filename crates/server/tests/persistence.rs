@@ -454,6 +454,30 @@ async fn durable_api_failures_and_import() {
         }
     }
     migration_scenarios().await;
+
+    // Liveness remains local during a DB outage, while data APIs fail honestly.
+    let (probe_origin, probe_server) = serve(state.clone()).await;
+    state.db.close().await;
+    assert_eq!(
+        client
+            .get(format!("{probe_origin}/healthz"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        client
+            .get(format!("{probe_origin}/api/workspace"))
+            .basic_auth("comic", Some(PASSWORD))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        503
+    );
+    probe_server.abort();
 }
 
 async fn migration_scenarios() {

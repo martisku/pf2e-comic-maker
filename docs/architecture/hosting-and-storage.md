@@ -99,7 +99,8 @@ be added later to reduce traffic; they must not replace the retained originals.
 
 The prototype now uses a long personal HTTP Basic password over HTTPS and
 same-origin checks for writes. All UI, workspace, and image routes require
-authentication; only readiness is public. This is one owner workspace, not
+authentication; only process liveness is public, without querying the database.
+This is one owner workspace, not
 multi-user/project authorization. Buckets must also remain private.
 
 ## Free capacity and operational limits

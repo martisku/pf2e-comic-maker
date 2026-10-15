@@ -51,7 +51,9 @@ One native Rust process serves the API, compiled frontend, and authorized image
 streams. PostgreSQL and object storage own saved data; the application requires
 no persistent local disk. HTTP Basic access protects this single personal
 workspace, and writes validate the browser origin. Production connections require
-TLS. Schema migrations and SQLite import are explicit CLI operations.
+TLS. Schema migrations and SQLite import are explicit CLI operations. Public
+health probes check process liveness without waking the database; startup and
+actual API operations check persistence.
 
 Docker and GitHub Actions now package and verify this architecture with
 disposable PostgreSQL/S3 fixtures and fresh-container retention checks. This

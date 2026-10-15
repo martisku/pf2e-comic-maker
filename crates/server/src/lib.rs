@@ -47,9 +47,10 @@ pub fn router(state: AppState, access: auth::Access, public: PathBuf) -> Router 
     )
 }
 
-async fn health(State(state): State<AppState>) -> Result<&'static str, ApiError> {
-    db::read(&state.db).await?;
-    Ok("ok")
+async fn health() -> &'static str {
+    // Platform probes must not keep a scale-to-zero database awake. Startup
+    // verifies the workspace; actual API operations check their own persistence.
+    "ok"
 }
 async fn load(State(state): State<AppState>) -> Result<Json<Snapshot>, ApiError> {
     Ok(Json(db::read(&state.db).await?))

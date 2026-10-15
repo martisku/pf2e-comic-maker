@@ -64,7 +64,10 @@ for the personal username/password. Basic credentials are protected by HTTPS;
 there is one shared owner workspace, not a multi-user account system. Browser
 credential caching/logout behavior is browser-dependent; close the authenticated
 browser session when using a shared device. All UI/API/image routes are protected
-except `/healthz`, which returns only readiness. Writes require the configured
+except `/healthz`, which returns only process liveness. It does not query Neon,
+so platform health probes cannot keep free database compute awake indefinitely.
+Startup verifies the workspace; actual API calls check their dependencies and
+report storage failure without acknowledging unsaved changes. Writes require the configured
 Origin. Responses containing workspace/image data are private and not cached.
 
 ## Upload recovery and cleanup
@@ -102,10 +105,16 @@ lifecycle configuration without enforcing expiration.
 
 ```sh
 docker run --rm --env-file .env \
+  --user "$(id -u):$(id -g)" \
   --mount type=bind,src=/absolute/path/to/old-data,dst=/source,readonly \
   -e COMIC_SOURCE_OFFLINE=1 \
   comic-server import-sqlite /source/workspace.sqlite
 ```
+
+The import process must be able to read the private source directory and files.
+The command above runs it as the source owner on Linux, without broadening file
+permissions. Normal application containers still run as UID 10001; use an
+appropriate UID or a readable offline backup copy on other systems.
 
 The source must be an offline SQLite database readable from a read-only mount;
 use a cleanly stopped/checkpointed copy if SQLite requires WAL recovery. Images
