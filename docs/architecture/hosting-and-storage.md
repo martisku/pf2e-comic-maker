@@ -1,7 +1,7 @@
 # Hosting and storage target architecture
 
 Date: 2026-10-15
-Status: Selected architectural direction; migration and deployment are not implemented.
+Status: Prototype storage implementation available; live Neon validation and deployment pending.
 
 ## Goals and constraints
 
@@ -17,12 +17,16 @@ but deployment without card verification has not been confirmed for the account.
 
 ## Current implementation versus target
 
-The [current prototype](overview.md) stores one revisioned workspace JSON document
-in SQLite and writes original images to the server's local filesystem. The
-Render Free configuration proposed in [PR #1](https://github.com/martisku/pf2e-comic-maker/pull/1)
-is a disposable demo and does not meet the durability requirement. That setup
-has not been merged into `main`. Neither PostgreSQL nor object storage is
-connected yet.
+The [current prototype](overview.md) now stores a revisioned workspace JSONB
+document and upload catalog in PostgreSQL, with private images in S3-compatible
+object storage. A read-only SQLite import and abandoned-upload reconciliation
+are implemented. See [setup and recovery](../development/neon-storage.md).
+
+This implements the storage transition for the four-panel spike, not the full
+relational milestone. Live Neon compatibility, account activation, and a
+confirmed card-free native Rust host remain pending. The earlier disposable
+Render configuration in PR #1 has not been merged into `main` and is superseded
+by the current provider-independent Docker/CI verification setup.
 
 | Component | Target responsibility |
 | --- | --- |
@@ -93,9 +97,10 @@ to an object key and streams the object after checking access. Browser code
 never receives database credentials or bucket write credentials. Thumbnails can
 be added later to reduce traffic; they must not replace the retained originals.
 
-The current prototype has no authentication. The personal access mechanism and
-project authorization must be specified before hosting real private comic data.
-A private bucket alone does not protect an unauthenticated application API.
+The prototype now uses a long personal HTTP Basic password over HTTPS and
+same-origin checks for writes. All UI, workspace, and image routes require
+authentication; only readiness is public. This is one owner workspace, not
+multi-user/project authorization. Buckets must also remain private.
 
 ## Free capacity and operational limits
 
@@ -143,8 +148,9 @@ formatting, tests, Clippy, and release builds. Retain the container startup
 verification proposed in PR #1 and add storage integration checks as part of
 the migration implementation.
 
-The workflow proposed in PR #1 uses a provider-specific Render deploy hook.
-Once a card-free application host is confirmed, adapt the deployment step and runtime secrets,
+The current workflow verifies storage without deploying or using production
+credentials. Once a card-free application host is confirmed, add its deployment
+step and runtime secrets,
 deploy the verified commit, and check readiness. Schema migrations must be
 versioned, coordinated, and compatible with the deployed application; do not
 run destructive migrations implicitly on every process start.
@@ -185,10 +191,12 @@ The browser UI and project model should not depend on the provider's hostname.
 5. Verify that saved edits and images survive a fresh container, a redeploy,
    and idle suspension without any local data volume.
 
-Open decisions include the application host, personal access mechanism,
+Open decisions include the application host, live Neon validation,
 relational milestone schema, and backup execution/retention. This document
 records the selected architecture; it does not authorize paid provisioning or
-claim the migration, authentication, backup, or live deployment is complete.
+claim existing user data has been migrated, full backup is implemented, or a
+live deployment is complete. Prototype access protection and the migration
+command are implemented; accounts and production data are not touched.
 
 ## Sources
 

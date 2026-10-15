@@ -1,3 +1,6 @@
 /target/
 /.prototype-data/
 /artifacts/
+.env
+.env.*
+!.env.example

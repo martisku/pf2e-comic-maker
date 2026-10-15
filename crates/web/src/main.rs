@@ -346,19 +346,34 @@ async fn upload_image(
         return Err("Choose an image no larger than 20 MB.".into());
     }
     let bytes = file.read_bytes().await.map_err(|e| e.to_string())?;
-    let response = Request::post(&format!("/api/panels/{panel_id}/images"))
-        .header("content-type", "application/octet-stream")
-        .header("x-comic-revision", &revision.to_string())
-        .body(bytes.to_vec())
-        .map_err(|e| e.to_string())?
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    if !response.ok() {
-        return Err(response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Upload failed.".into()));
+    let upload_id = uuid::Uuid::new_v4().to_string();
+    for attempt in 0..3 {
+        let response = Request::post(&format!("/api/panels/{panel_id}/images"))
+            .header("content-type", "application/octet-stream")
+            .header("x-comic-revision", &revision.to_string())
+            .header("x-comic-upload-id", &upload_id)
+            .body(bytes.to_vec())
+            .map_err(|e| e.to_string())?
+            .send()
+            .await;
+        match response {
+            Ok(response) if response.ok() => {
+                if let Ok(snapshot) = response.json().await {
+                    return Ok(snapshot);
+                }
+                // A lost/malformed success body is ambiguous too: reuse the ID.
+            }
+            Ok(response) if response.status() < 500 => {
+                return Err(response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Upload rejected.".into()));
+            }
+            _ => {}
+        }
+        if attempt < 2 {
+            gloo_timers::future::TimeoutFuture::new(500 * (attempt + 1)).await;
+        }
     }
-    response.json().await.map_err(|e| e.to_string())
+    Err("Upload outcome is unknown. Reload saved work before selecting the file again.".into())
 }

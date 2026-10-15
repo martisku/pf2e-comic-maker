@@ -1,0 +1,59 @@
+name: Verify durable storage
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: storage-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Format, unit tests, Clippy, and frontend/server release builds
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: comic-runtime:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Load the builder for integration tests
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: build
+          load: true
+          tags: comic-build:ci
+      - name: Start disposable storage and run persistence/failure integration tests
+        run: |
+          set -euo pipefail
+          docker compose -f compose.storage.yaml up -d --wait
+          bash scripts/prepare-test-storage.sh
+          docker run --rm --network host \
+            -e TEST_DATABASE_URL=postgres://comic:local-disposable-test@127.0.0.1:54329/comic_test \
+            -e TEST_S3_ENDPOINT=http://127.0.0.1:19000 \
+            comic-build:ci cargo test -p comic-server --locked --test persistence -- --ignored --nocapture
+      - name: Install browser verification tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/comic-browser" playwright@1.56.1
+          "$RUNNER_TEMP/comic-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Browser checks and fresh-container durability
+        env:
+          NODE_PATH: ${{ runner.temp }}/comic-browser/node_modules
+          COMIC_CHROMIUM: bundled
+          COMIC_TEST_URL: http://127.0.0.1:10000
+          COMIC_TEST_PASSWORD: disposable-test-password-only
+        run: bash scripts/container-smoke.sh
+      - name: Cleanup disposable services
+        if: always()
+        run: |
+          docker rm -f comic-ci 2>/dev/null || true
+          docker compose -f compose.storage.yaml down -v

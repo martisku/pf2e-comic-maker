@@ -4,7 +4,8 @@ Status: Draft
 
 Update 2026-10-15: the provisional SQLite/local-file hosting direction below is
 superseded by the selected [Neon PostgreSQL and object storage architecture](../architecture/hosting-and-storage.md).
-The rest of this milestone proposal remains a draft; migration is not implemented.
+The prototype storage transition and read-only SQLite import are now implemented;
+live Neon validation and the rest of this milestone proposal remain pending.
 
 ## Confirmed direction
 

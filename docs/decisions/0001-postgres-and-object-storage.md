@@ -1,7 +1,7 @@
 # 0001: PostgreSQL and object storage on Neon
 
 Date: 2026-10-15
-Status: Accepted architectural direction; implementation pending.
+Status: Accepted; prototype implementation available, live provider validation pending.
 
 ## Context
 
@@ -25,3 +25,5 @@ access protection, and provider availability need operational handling. No
 application migration or hosting activation is performed by this decision.
 
 Details: [hosting and storage target architecture](../architecture/hosting-and-storage.md).
+
+Implementation: see [storage setup and recovery](../development/neon-storage.md).
