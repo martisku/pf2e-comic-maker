@@ -7,6 +7,11 @@ editing, page composition, server-side saving, and image uploads. See
 [setup and prototype limits](docs/development/dioxus-prototype.md).
 This experiment does not implement the complete first milestone.
 
+The prototype now uses PostgreSQL and private S3-compatible image storage. See
+[Neon setup, personal access, and recovery](docs/development/neon-storage.md).
+Docker and GitHub Actions verify disposable storage; live account activation and
+a card-free application host are still pending.
+
 The project is intended to replace a fragmented workflow based on chat history, Markdown files, prompts, reference images, and manually organized generated assets.
 
 The application should provide one place to plan the story, manage reusable visual models, construct comic panels, generate prompts, review generated images, and preserve story and visual consistency over time.

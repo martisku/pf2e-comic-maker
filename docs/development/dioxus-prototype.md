@@ -7,7 +7,7 @@ first milestone or mark its acceptance criteria complete.
 ## Included
 
 - Dioxus 0.7.10 browser UI compiled to WebAssembly.
-- Native Rust/Axum server, shared Rust data structures, and SQLx/SQLite storage.
+- Native Rust/Axum server, shared Rust data structures, and SQLx/PostgreSQL storage and private S3-compatible image objects.
 - One sample workspace with four independently editable panels.
 - Automatic saving, visible outcomes, retry after failures, and revision checks
   that reject stale writes from another browser session.
@@ -19,35 +19,16 @@ first milestone or mark its acceptance criteria complete.
 
 ## Run locally
 
-Install a current stable Rust toolchain, then:
+Set up PostgreSQL, private object storage, and personal access using
+[the storage setup guide](neon-storage.md). Native local development requires
+a current stable Rust toolchain, the `wasm32-unknown-unknown` target, and Dioxus
+CLI 0.7.10. Apply the schema explicitly, then build and run the UI/server with
+`bash scripts/run-prototype.sh`.
 
-```sh
-rustup target add wasm32-unknown-unknown
-cargo install dioxus-cli --version 0.7.10 --locked
-bash scripts/run-prototype.sh
-```
-
-Open `http://127.0.0.1:8080`. The script builds the web bundle and starts the
-server on that same origin, so browser API requests need no separate proxy.
-Data is stored under `.prototype-data/` and survives server restarts.
-
-In this managed workspace, tools were installed under `/workspace/.pf2e-tools`.
-Use `COMIC_TOOLCHAIN_DIR=/workspace/.pf2e-tools bash scripts/run-prototype.sh`.
-This optional setting selects the local toolchain and already downloaded build
-helpers. It avoids Dioxus CLI's certificate error when it tries to fetch helpers
-through the environment proxy; TLS verification was preserved for the downloads.
-
-For a phone on the same trusted network, bind the server with
-`COMIC_BIND=0.0.0.0:8080 bash scripts/run-prototype.sh` and open the computer's
-LAN address from the phone. No public deployment or login system is included.
-
-Configuration:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `COMIC_BIND` | `127.0.0.1:8080` | Listener address |
-| `COMIC_DATA_DIR` | `.prototype-data` | SQLite database and image files |
-| `COMIC_PUBLIC_DIR` | `public` when running the server directly | Built frontend directory; the run script sets this automatically |
+The server serves the frontend and API on one origin. Configure `COMIC_ORIGIN`
+for the exact browser URL and use HTTPS for real data. Initialize a fresh
+PostgreSQL workspace with the explicit `migrate` command. The application
+needs no local data volume or legacy import. No native application host or live deployment is selected yet.
 
 ## Verification commands
 
@@ -58,7 +39,7 @@ cargo clippy -p comic-model -p comic-server --locked -- -D warnings
 cargo clippy -p comic-web --target wasm32-unknown-unknown --locked -- -D warnings
 ```
 
-The browser smoke test requires Node.js, Playwright, and Chromium. With a running
+The browser smoke test requires Node.js, Playwright, Chromium, and `COMIC_TEST_PASSWORD`. With a running
 server backed by fresh disposable data, execute `node scripts/browser-smoke.cjs`.
 Set `COMIC_TEST_URL` to use a different URL and `COMIC_CHROMIUM` to choose a browser
 executable. The smoke test edits and uploads to the sample workspace; do not run
@@ -78,8 +59,8 @@ backup/restore, integrated generation, or finished export yet. Thumbnails and
 browser navigation warnings are also deferred. Original images are served
 directly, so performance with large image collections remains unverified.
 
-SQLite currently holds the sample workspace as one JSON document with a revision
-counter. This validates the round trip, not the relational milestone model.
+PostgreSQL holds the sample workspace as one JSONB document with a revision
+counter, with image metadata in a separate upload catalog. This validates the round trip, not the relational milestone model.
 Automatic saving runs in a serialized loop approximately every 700 ms. Edits
 made during a save remain pending; image upload is enabled only after pending
 edits are saved. Conflicts stop autosaving and retain local text on screen; copy
@@ -88,15 +69,18 @@ that text before refreshing and reapplying it to the latest saved workspace.
 Uploads are validated using image decoding, not filenames or browser MIME types.
 20 MB means 20,000,000 bytes. The prototype additionally limits dimensions to
 12,000 pixels per axis and decoder allocations to 256 MiB. Image processing runs
-on a blocking worker. Uploads write a staged file, rename it, then save the image
-record; database failure attempts file cleanup. Full crash recovery, storage
-quotas, and backup consistency belong in milestone implementation plans.
+on a blocking worker. Uploads journal their operation in PostgreSQL, PUT a private object, and publish
+the record and revision in a transaction. UUID retries, ambiguous outcomes, and
+abandoned-object reconciliation are covered in the storage implementation.
+Storage quotas and backup consistency still need operational handling.
 
 The next stack review should assess browser performance on actual phones and
-decide hosting/storage, access protection, and whether explicit Axum endpoints
+confirm card-free hosting and live Neon behavior, and whether explicit Axum endpoints
 remain preferable to Dioxus fullstack server functions.
 
 ## Verification results — 2026-10-12
+
+These are historical results for the earlier local-storage baseline.
 
 - Built the optimized Dioxus web bundle with Dioxus/CLI 0.7.10 and Rust 1.99.0.
   The current optimized Wasm module is about 505 KB before compression; this is
@@ -117,3 +101,13 @@ remain preferable to Dioxus fullstack server functions.
 Desktop and phone-width screenshots were inspected during verification. Physical
 phones and Safari/Firefox have not yet been tested. No public deployment or
 GitHub publication was performed as part of this spike.
+
+## Storage transition verification — 2026-10-15
+
+The PostgreSQL/S3 transition passed native and Wasm linting, four Rust unit
+tests, the explicit storage integration suite, optimized native/frontend builds,
+and the Chromium desktop/phone workflow. Two fresh non-root runtime containers
+retained the same workspace and original image bytes with no mounted data
+volume. See the [implementation results](../plans/durable-storage.md) and
+[operational setup](neon-storage.md). Live Neon validation, a card-free native
+host, and physical-phone/Safari/Firefox verification remain pending.

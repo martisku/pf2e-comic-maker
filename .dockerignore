@@ -1,0 +1,11 @@
+.git
+.github
+target
+.prototype-data
+artifacts
+work
+docs
+.env
+.env.*
+*.sqlite
+*.sqlite-*

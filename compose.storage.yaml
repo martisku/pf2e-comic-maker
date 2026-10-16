@@ -1,0 +1,24 @@
+# Disposable local/CI services only. These credentials are public test fixtures.
+# Do not use this Compose file or COMIC_INSECURE_LOCAL for production.
+services:
+  comic-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: comic
+      POSTGRES_PASSWORD: local-disposable-test
+      POSTGRES_DB: comic_test
+    ports:
+      - "127.0.0.1:54329:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U comic -d comic_test"]
+      interval: 2s
+      retries: 30
+  comic-s3:
+    image: ghcr.io/rustfs/rustfs@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c
+    user: "0:0"
+    command: ["/data"]
+    environment:
+      RUSTFS_ACCESS_KEY: comic-test-access
+      RUSTFS_SECRET_KEY: comic-test-secret-123
+    ports:
+      - "127.0.0.1:19000:9000"

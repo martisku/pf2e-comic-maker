@@ -1,10 +1,11 @@
 # Current architecture
 
-This page describes the implemented prototype. The selected next architecture
-uses Neon PostgreSQL and object storage, with no payment card and no persistent
-application disk. See [hosting and storage target architecture](hosting-and-storage.md)
-and [the storage decision](../decisions/0001-postgres-and-object-storage.md).
-That migration is not implemented; the card-free application host remains open.
+The server now implements the selected PostgreSQL/private object-storage
+architecture for the existing prototype. Live Neon account validation and a
+card-free application host remain pending. See
+[hosting and storage architecture](hosting-and-storage.md),
+[the storage decision](../decisions/0001-postgres-and-object-storage.md), and
+[configuration, import, and verification](../development/neon-storage.md).
 
 The repository now includes a small, explicitly authorized Dioxus web technical
 spike. The first milestone is still specified in requirements and is not fully
@@ -21,7 +22,7 @@ Browser: Dioxus / WebAssembly / responsive CSS
 Rust server: Axum / Tokio
     |                         |
     v                         v
-SQLite via SQLx          Project-owned image files
+PostgreSQL via SQLx      Private S3 image objects
 ```
 
 - `crates/model`: serializable workspace, panel, layout, and image structures;
@@ -37,16 +38,27 @@ The browser is not the durable storage authority. Multiple devices share data
 when pointed at the same server. Updates carry the revision they were based on;
 conflicting updates fail without silently replacing newer work.
 
-The prototype uses one JSON workspace record in SQLite. Production feature
+The prototype uses one JSONB workspace record in PostgreSQL and a durable
+upload catalog. Database row locks enforce revision checks across server
+instances. The catalog coordinates idempotent uploads and orphan cleanup. Production feature
 plans must define the relational schema, migrations, project boundaries,
 backup/restore, thumbnail strategy, and recovery behavior. A database/file store
 combination is not a single transaction.
 
 ## Local deployment
 
-One native Rust process serves the API, compiled frontend, and images. It needs
-persistent writable storage. The default listener is loopback-only. Phone
-access requires a reachable server; no hosting, authentication, offline editing,
-or automatic cross-device refresh has been implemented.
+One native Rust process serves the API, compiled frontend, and authorized image
+streams. PostgreSQL and object storage own saved data; the application requires
+no persistent local disk. HTTP Basic access protects this single personal
+workspace, and writes validate the browser origin. Production connections require
+TLS. PostgreSQL schema migration and workspace initialization are explicit CLI
+operations. Public health probes check process liveness without waking the database; startup and
+actual API operations check persistence.
+
+Docker and GitHub Actions now package and verify this architecture with
+disposable PostgreSQL/S3 fixtures and fresh-container retention checks. This
+does not activate a native application host or provision a paid service.
+Offline editing, multi-user/project authorization, thumbnails, and full project
+backup/restore remain separate scope.
 
 See [prototype setup and limits](../development/dioxus-prototype.md).

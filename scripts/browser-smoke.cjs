@@ -2,6 +2,7 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const { randomUUID } = require('node:crypto');
 
 const baseURL = process.env.COMIC_TEST_URL || 'http://127.0.0.1:8080';
 const output = 'artifacts';
@@ -9,12 +10,16 @@ fs.mkdirSync(output, { recursive: true });
 
 (async () => {
   const browser = await chromium.launch({
-    executablePath: process.env.COMIC_CHROMIUM || '/usr/bin/chromium',
+    executablePath: process.env.COMIC_CHROMIUM === 'bundled' ? undefined : (process.env.COMIC_CHROMIUM || '/usr/bin/chromium'),
     headless: true,
     args: ['--no-sandbox'],
   });
   const errors = [];
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    httpCredentials: { username: 'comic', password: process.env.COMIC_TEST_PASSWORD || '', send: 'always' },
+    extraHTTPHeaders: { Origin: new URL(baseURL).origin },
+  });
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));
   const read = async () => {
@@ -109,13 +114,13 @@ fs.mkdirSync(output, { recursive: true });
 
     const unchanged = await read();
     const invalid = await context.request.post(`${baseURL}/api/panels/1/images`, {
-      headers: { 'x-comic-revision': String(unchanged.revision), 'content-type': 'application/octet-stream' },
+      headers: { 'x-comic-upload-id': randomUUID(), 'x-comic-revision': String(unchanged.revision), 'content-type': 'application/octet-stream' },
       data: Buffer.from('invalid image bytes'),
     });
     assert.equal(invalid.status(), 400);
     assert.deepEqual(await read(), unchanged);
     const oversized = await context.request.post(`${baseURL}/api/panels/1/images`, {
-      headers: { 'x-comic-revision': String(unchanged.revision), 'content-type': 'application/octet-stream' },
+      headers: { 'x-comic-upload-id': randomUUID(), 'x-comic-revision': String(unchanged.revision), 'content-type': 'application/octet-stream' },
       data: Buffer.alloc(20_000_001),
     });
     assert.equal(oversized.status(), 400);
@@ -129,7 +134,7 @@ fs.mkdirSync(output, { recursive: true });
       }, mime), 'base64');
       const current = await read();
       const upload = await context.request.post(`${baseURL}/api/panels/4/images`, {
-        headers: { 'x-comic-revision': String(current.revision), 'content-type': mime },
+        headers: { 'x-comic-upload-id': randomUUID(), 'x-comic-revision': String(current.revision), 'content-type': mime },
         data: bytes,
       });
       assert(upload.ok(), `${mime} upload failed: ${await upload.text()}`);
