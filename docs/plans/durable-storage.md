@@ -8,8 +8,8 @@ Requirement: [durable storage](../requirements/durable-storage.md).
 
 ## Inspected baseline
 
-The Axum server uses SQLite, local files, and a process-local write mutex. The
-browser uses same-origin JSON and raw image routes. SQLx is already present.
+Before the storage implementation, the Axum server used local storage and a
+process-local write mutex. The browser uses same-origin JSON and raw image routes. SQLx is already present.
 The shared model and four-panel UI can stay intact during this migration.
 
 ## Implementation steps
@@ -30,11 +30,7 @@ The shared model and four-panel UI can stay intact during this migration.
 5. Protect the single personal workspace using HTTP Basic authentication over
    HTTPS, a long runtime password, constant-time digest comparison, and
    same-origin checks on writes. This is not multi-user account management.
-6. Add read-only SQLite import with complete source preflight, deterministic
-   image intents, verification of uploaded bytes, resumable import identity,
-   and a database maintenance flag preventing edits during import. Do not erase
-   the original files or overwrite an unrelated/non-empty target.
-7. Keep existing UI behavior; add upload IDs and bounded retry. Package Docker
+6. Keep existing UI behavior; add upload IDs and bounded retry. Package Docker
    and local disposable Postgres/S3 setup. CI verifies without production
    credentials. Do not activate the superseded ephemeral Render demo.
 
@@ -45,8 +41,8 @@ The shared model and four-panel UI can stay intact during this migration.
   may have succeeded. An atomic pending-to-abandoned update determines ownership.
 - Cleanup cannot forget abandoned keys: a suspended uploader might write late.
 - Signed URLs expire: store object keys and stable application URLs instead.
-- Database and object stores are not a single backup. Import must preflight all
-  source files and verify target bytes before publishing the imported workspace.
+- Database and object stores are not a single backup; consistent export/restore
+  remains separate work.
 - Runtime startup must not quietly create an empty database when config or
   migration is missing. CLI/config errors must not print credential values.
 - Process liveness remains public but reveals no workspace data; authenticated routes
@@ -57,7 +53,7 @@ The shared model and four-panel UI can stay intact during this migration.
 Run formatting, Rust tests and Clippy for native and Wasm targets, frontend and
 server release builds. Integration tests must cover concurrent stale writes,
 forged images, retry identity, ambiguous PUT, failed DB finalization, cleanup,
-private reads, auth/Origin rejection, read-only/resumable import, and restart
+private reads, auth/Origin rejection, and restart
 durability. Run the existing desktop/phone browser workflow with disposable
 data and credentials. Review critical code sequentially after tests; no claim
 of independent model review or live Neon verification without actually doing it.
@@ -96,3 +92,35 @@ a confirmed card-free native Rust host. All automated fixtures are disposable.
   tombstones. No independent Astra review or live Neon test is claimed.
 - Actionlint, YAML parsing, Markdown links, shell/JavaScript syntax, and diff
   whitespace checks passed. No production data was migrated or credentials used.
+
+## Scope correction — 2026-10-16
+
+Status: Approved by the user's explicit clarification and standing authorization
+to implement and push after planning. The original storage rig has never been
+used. No legacy data migration is required.
+
+1. Remove the SQLite import module/CLI, SQLx SQLite feature, and import-only tests.
+2. Remove import-only workspace columns and maintenance checks. The initial
+   schema has not been deployed; simplify it directly and use fresh disposable
+   test databases. Keep explicit PostgreSQL schema migration and initialization.
+3. Update setup, architecture, and CI smoke documentation to describe fresh
+   PostgreSQL/S3 setup. Keep upload recovery and concurrency coverage.
+4. Regenerate the lockfile, verify the resolved server dependency tree excludes
+   SQLite, then run formatting, native tests/Clippy and PostgreSQL/S3 integration
+   checks. The existing CI additionally verifies release builds and restart
+   durability through desktop/phone browser checks. Push to the existing PR.
+
+Review: legacy import has no user value here. Removing its maintenance state must
+not change upload intent locking, revision conflicts, or reconciliation safety.
+PostgreSQL schema migrations remain necessary and are unrelated to legacy import.
+The historical verification above records what was tested on 2026-10-15; import
+results no longer describe supported application functionality.
+
+Verification of the scope correction: native compilation, formatting, the four
+unit tests, all-targets native Clippy, and the PostgreSQL/S3 failure-recovery
+integration suite passed locally. The integration suite now checks a fresh
+default workspace and verifies re-running schema initialization preserves saved
+work. The resolved server dependency tree has no SQLite driver. Cargo.lock may
+retain optional SQLx driver metadata, which is not compiled into the server.
+Shell syntax and diff whitespace checks passed. Full release/browser verification
+continues in the PR's GitHub Actions workflow after push.

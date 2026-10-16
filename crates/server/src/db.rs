@@ -7,18 +7,13 @@ use uuid::Uuid;
 pub struct WorkspaceRow {
     pub revision: i64,
     pub data: Json<Workspace>,
-    pub import_source: Option<String>,
-    pub import_complete: bool,
 }
 impl WorkspaceRow {
-    pub fn snapshot(self) -> Result<Snapshot, ApiError> {
-        if !self.import_complete {
-            return Err(unavailable());
-        }
-        Ok(Snapshot {
+    pub fn snapshot(self) -> Snapshot {
+        Snapshot {
             revision: self.revision as u64,
             workspace: self.data.0,
-        })
+        }
     }
 }
 
@@ -86,17 +81,17 @@ pub async fn migrate(pool: &PgPool) -> Result<(), String> {
 }
 
 pub async fn read(pool: &PgPool) -> Result<Snapshot, ApiError> {
-    sqlx::query_as::<_, WorkspaceRow>(
-        "SELECT revision, data, import_source, import_complete FROM workspace WHERE id = 1",
+    Ok(
+        sqlx::query_as::<_, WorkspaceRow>("SELECT revision, data FROM workspace WHERE id = 1")
+            .fetch_one(pool)
+            .await?
+            .snapshot(),
     )
-    .fetch_one(pool)
-    .await?
-    .snapshot()
 }
 
 pub async fn replay(pool: &PgPool, id: Uuid) -> Result<Snapshot, ApiError> {
     let mut tx = pool.begin().await?;
-    let snapshot = locked(&mut tx).await?.snapshot()?;
+    let snapshot = locked(&mut tx).await?.snapshot();
     let intent = find(&mut tx, id).await?.ok_or_else(unavailable)?;
     if intent.state != "ready" {
         return Err(unavailable());
@@ -109,8 +104,11 @@ pub async fn replay(pool: &PgPool, id: Uuid) -> Result<Snapshot, ApiError> {
 }
 
 pub async fn locked(tx: &mut Transaction<'_, Postgres>) -> Result<WorkspaceRow, ApiError> {
-    Ok(sqlx::query_as("SELECT revision, data, import_source, import_complete FROM workspace WHERE id = 1 FOR UPDATE")
-        .fetch_one(&mut **tx).await?)
+    Ok(
+        sqlx::query_as("SELECT revision, data FROM workspace WHERE id = 1 FOR UPDATE")
+            .fetch_one(&mut **tx)
+            .await?,
+    )
 }
 
 pub async fn write(
@@ -118,8 +116,13 @@ pub async fn write(
     snapshot: &Snapshot,
 ) -> Result<(), ApiError> {
     let revision = i64::try_from(snapshot.revision).map_err(|_| invalid("Invalid revision."))?;
-    let changed = sqlx::query("UPDATE workspace SET revision = revision + 1, data = $1 WHERE id = 1 AND revision = $2 AND import_complete")
-        .bind(Json(&snapshot.workspace)).bind(revision).execute(&mut **tx).await?;
+    let changed = sqlx::query(
+        "UPDATE workspace SET revision = revision + 1, data = $1 WHERE id = 1 AND revision = $2",
+    )
+    .bind(Json(&snapshot.workspace))
+    .bind(revision)
+    .execute(&mut **tx)
+    .await?;
     if changed.rows_affected() != 1 {
         return Err(conflict());
     }
@@ -132,7 +135,7 @@ pub async fn save(pool: &PgPool, request: SaveRequest) -> Result<Snapshot, ApiEr
         .validate()
         .map_err(|_| invalid("Invalid workspace content."))?;
     let mut tx = pool.begin().await?;
-    let current = locked(&mut tx).await?.snapshot()?;
+    let current = locked(&mut tx).await?.snapshot();
     if request.revision != current.revision {
         return Err(conflict());
     }
@@ -174,7 +177,7 @@ pub async fn insert(tx: &mut Transaction<'_, Postgres>, intent: &Intent) -> Resu
 // Workspace first, intent second: use this lock order in every publishing path.
 pub async fn reserve(pool: &PgPool, intent: &Intent) -> Result<bool, ApiError> {
     let mut tx = pool.begin().await?;
-    let snapshot = locked(&mut tx).await?.snapshot()?;
+    let snapshot = locked(&mut tx).await?.snapshot();
     if let Some(previous) = find(&mut tx, intent.id).await? {
         if !previous.matches(intent) {
             return Err(conflict());
@@ -210,7 +213,7 @@ pub async fn reserve(pool: &PgPool, intent: &Intent) -> Result<bool, ApiError> {
 
 pub async fn finish(pool: &PgPool, id: Uuid) -> Result<Snapshot, ApiError> {
     let mut tx = pool.begin().await?;
-    let mut snapshot = locked(&mut tx).await?.snapshot()?;
+    let mut snapshot = locked(&mut tx).await?.snapshot();
     let intent = find(&mut tx, id).await?.ok_or_else(unavailable)?;
     if intent.state == "ready" {
         if Some(snapshot.revision as i64) != intent.expected_revision.checked_add(1) {
@@ -277,7 +280,7 @@ pub async fn abandon(pool: &PgPool, id: Uuid) -> Result<Abandon, ApiError> {
 
 pub async fn reconciliation_keys(pool: &PgPool) -> Result<Vec<String>, ApiError> {
     // Keep tombstones and revisit them; even late PUTs remain discoverable.
-    Ok(sqlx::query_scalar("UPDATE image_uploads SET state = 'abandoned', touched_at = now() WHERE (SELECT import_complete FROM workspace WHERE id = 1) AND id IN (SELECT id FROM image_uploads WHERE state = 'abandoned' OR (state = 'pending' AND touched_at < now() - interval '1 hour') ORDER BY touched_at LIMIT 100 FOR UPDATE SKIP LOCKED) RETURNING object_key")
+    Ok(sqlx::query_scalar("UPDATE image_uploads SET state = 'abandoned', touched_at = now() WHERE id IN (SELECT id FROM image_uploads WHERE state = 'abandoned' OR (state = 'pending' AND touched_at < now() - interval '1 hour') ORDER BY touched_at LIMIT 100 FOR UPDATE SKIP LOCKED) RETURNING object_key")
         .fetch_all(pool).await?)
 }
 

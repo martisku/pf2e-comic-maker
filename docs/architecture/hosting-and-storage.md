@@ -19,8 +19,9 @@ but deployment without card verification has not been confirmed for the account.
 
 The [current prototype](overview.md) now stores a revisioned workspace JSONB
 document and upload catalog in PostgreSQL, with private images in S3-compatible
-object storage. A read-only SQLite import and abandoned-upload reconciliation
-are implemented. See [setup and recovery](../development/neon-storage.md).
+object storage. Abandoned-upload reconciliation is implemented. The original
+local-storage rig was never used; initialize a fresh PostgreSQL workspace rather
+than importing legacy data. See [setup and recovery](../development/neon-storage.md).
 
 This implements the storage transition for the four-panel spike, not the full
 relational milestone. Live Neon compatibility, account activation, and a
@@ -53,7 +54,7 @@ flowchart TD
 ```
 
 One Rust service initially serves both frontend and API on the same origin.
-It needs no persistent local disk after both storage migrations are complete.
+It needs no persistent local disk.
 Local temporary files and caches may be lost at any time without losing saved
 work. The browser is not the durable storage authority.
 
@@ -64,7 +65,7 @@ crop settings, selected images, and revisions. Image records identify immutable
 objects by stable keys, not expiring signed URLs or provider-specific public
 URLs. Image bytes belong in object storage, not database rows.
 
-For the first migration, retaining the revisioned workspace snapshot as JSONB
+For the prototype, retaining the revisioned workspace snapshot as JSONB
 is acceptable. This does not implement the complete relational milestone model;
 its schema and migrations need a separate implementation plan.
 
@@ -147,7 +148,7 @@ Keep build and verification independent of production credentials. CI should use
 disposable PostgreSQL and object-storage test resources. Preserve the documented
 formatting, tests, Clippy, and release builds. Retain the container startup
 verification proposed in PR #1 and add storage integration checks as part of
-the migration implementation.
+the storage implementation.
 
 The current workflow verifies storage without deploying or using production
 credentials. Once a card-free application host is confirmed, add its deployment
@@ -184,9 +185,8 @@ The browser UI and project model should not depend on the provider's hostname.
    access protection in an implementation plan.
 2. Implement PostgreSQL persistence and S3-compatible image storage; verify
    stale-write protection, upload failures, reads, and retained alternatives.
-3. If existing data must be kept, back it up, migrate SQLite records and image
-   files while writes are stopped, and verify content and references. Do not
-   discard the source until restore and migration have been checked.
+3. Initialize a fresh PostgreSQL workspace using the explicit schema migration
+   command. No old workspace or images need importing (confirmed 2026-10-16).
 4. Confirm a free application host that requires no payment card; configure
    secrets and adapt GitHub Actions to that host.
 5. Verify that saved edits and images survive a fresh container, a redeploy,
@@ -196,7 +196,7 @@ Open decisions include the application host, live Neon validation,
 relational milestone schema, and backup execution/retention. This document
 records the selected architecture; it does not authorize paid provisioning or
 claim existing user data has been migrated, full backup is implemented, or a
-live deployment is complete. Prototype access protection and the migration
+live deployment is complete. Prototype access protection and the schema migration
 command are implemented; accounts and production data are not touched.
 
 ## Sources

@@ -156,7 +156,7 @@ async fn upload(
 
 #[tokio::test]
 #[ignore = "requires explicitly configured disposable PostgreSQL and S3 services"]
-async fn durable_api_failures_and_import() {
+async fn durable_api_failure_recovery() {
     let (state, faults) = fixture().await;
     let (origin, server) = serve(state.clone()).await;
     let client = reqwest::Client::new();
@@ -181,6 +181,8 @@ async fn durable_api_failures_and_import() {
         );
     }
     let initial = db::read(&state.db).await.unwrap();
+    assert_eq!(initial.revision, 0);
+    assert_eq!(initial.workspace, Workspace::default());
     let request = || {
         client
             .put(format!("{origin}/api/workspace"))
@@ -225,6 +227,12 @@ async fn durable_api_failures_and_import() {
         "exactly one concurrent stale edit may commit"
     );
     let current = db::read(&state.db).await.unwrap();
+    db::migrate(&state.db).await.unwrap();
+    assert_eq!(
+        db::read(&state.db).await.unwrap(),
+        current,
+        "schema initialization must not overwrite saved work"
+    );
     let mut forged = current.workspace.clone();
     forged.panels[0].images.push(PanelImage {
         id: Uuid::new_v4().to_string(),
@@ -453,7 +461,6 @@ async fn durable_api_failures_and_import() {
             ));
         }
     }
-    migration_scenarios().await;
 
     // Liveness remains local during a DB outage, while data APIs fail honestly.
     let (probe_origin, probe_server) = serve(state.clone()).await;
@@ -478,145 +485,4 @@ async fn durable_api_failures_and_import() {
         503
     );
     probe_server.abort();
-}
-
-async fn migration_scenarios() {
-    let (state, faults) = fixture().await;
-    let folder = std::env::temp_dir().join(format!("comic-import-{}", Uuid::new_v4()));
-    std::fs::create_dir_all(folder.join("images")).unwrap();
-    let path = folder.join("workspace.sqlite");
-    let source = sqlx::SqlitePool::connect_with(
-        sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(&path)
-            .create_if_missing(true),
-    )
-    .await
-    .unwrap();
-    sqlx::query("CREATE TABLE workspace (id INTEGER PRIMARY KEY, revision INTEGER, data TEXT)")
-        .execute(&source)
-        .await
-        .unwrap();
-    let mut workspace = Workspace::default();
-    let mut originals = Vec::new();
-    for (panel, format, ext) in [
-        (0, image::ImageFormat::Png, "png"),
-        (0, image::ImageFormat::Jpeg, "jpg"),
-        (1, image::ImageFormat::WebP, "webp"),
-    ] {
-        let id = Uuid::new_v4().to_string();
-        let name = format!("{id}.{ext}");
-        let bytes = picture(format);
-        std::fs::write(folder.join("images").join(&name), &bytes).unwrap();
-        workspace.panels[panel].images.push(PanelImage {
-            id: id.clone(),
-            url: format!("/images/{name}"),
-        });
-        workspace.panels[panel].selected_image = Some(id);
-        originals.push((name, bytes));
-    }
-    workspace.title = "Imported project".into();
-    sqlx::query("INSERT INTO workspace VALUES (1, 7, ?)")
-        .bind(serde_json::to_string(&workspace).unwrap())
-        .execute(&source)
-        .await
-        .unwrap();
-    source.close().await;
-    let original_db = std::fs::read(&path).unwrap();
-
-    // Missing source files fail before the target maintenance barrier or writes.
-    std::fs::remove_file(folder.join("images").join(&originals[0].0)).unwrap();
-    assert!(
-        comic_server::migration::import(&state, &path)
-            .await
-            .is_err()
-    );
-    assert_eq!(db::read(&state.db).await.unwrap().revision, 0);
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM image_uploads")
-        .fetch_one(&state.db)
-        .await
-        .unwrap();
-    assert_eq!(count, 0);
-    std::fs::write(folder.join("images").join(&originals[0].0), &originals[0].1).unwrap();
-
-    faults.mode.store(2, Ordering::SeqCst);
-    assert!(
-        comic_server::migration::import(&state, &path)
-            .await
-            .is_err()
-    );
-    assert!(
-        db::read(&state.db).await.is_err(),
-        "incomplete import cannot accept normal edits"
-    );
-    assert_eq!(
-        comic_server::reconcile(&state).await.unwrap(),
-        0,
-        "import intents cannot be cleaned mid-import"
-    );
-    faults.mode.store(0, Ordering::SeqCst);
-    comic_server::migration::import(&state, &path)
-        .await
-        .unwrap();
-    let imported = db::read(&state.db).await.unwrap();
-    assert_eq!(imported.revision, 7);
-    assert_eq!(imported.workspace, workspace);
-    for (name, bytes) in &originals {
-        let id = Uuid::parse_str(name.split('.').next().unwrap()).unwrap();
-        let intent = db::image(&state.db, id).await.unwrap();
-        comic_server::storage::verify(
-            state.images.as_ref(),
-            &intent.object_key,
-            &intent.digest,
-            bytes.len(),
-        )
-        .await
-        .unwrap();
-        assert_eq!(
-            std::fs::read(folder.join("images").join(name)).unwrap(),
-            bytes.as_ref()
-        );
-    }
-    assert_eq!(
-        std::fs::read(&path).unwrap(),
-        original_db,
-        "import must not write source database"
-    );
-    let mut edited = imported.workspace.clone();
-    edited.title = "Edited after import".into();
-    let edited = db::save(
-        &state.db,
-        SaveRequest {
-            revision: imported.revision,
-            workspace: edited,
-        },
-    )
-    .await
-    .unwrap();
-    comic_server::migration::import(&state, &path)
-        .await
-        .unwrap();
-    assert_eq!(
-        db::read(&state.db).await.unwrap(),
-        edited,
-        "completed import is idempotent and does not overwrite later edits"
-    );
-
-    let (other, _) = fixture().await;
-    db::save(
-        &other.db,
-        SaveRequest {
-            revision: 0,
-            workspace: Workspace::default(),
-        },
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        comic_server::migration::import(&other, &path)
-            .await
-            .unwrap_err()
-            .0,
-        409
-    );
-    let _ = std::fs::remove_dir_all(folder);
 }

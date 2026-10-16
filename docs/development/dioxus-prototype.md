@@ -26,10 +26,9 @@ CLI 0.7.10. Apply the schema explicitly, then build and run the UI/server with
 `bash scripts/run-prototype.sh`.
 
 The server serves the frontend and API on one origin. Configure `COMIC_ORIGIN`
-for the exact browser URL and use HTTPS for real data. SQLite/local-file storage
-is the historical baseline; existing data can be imported using the explicit
-read-only `import-sqlite` command. The application no longer needs a local data
-volume. No native application host or live deployment is selected yet.
+for the exact browser URL and use HTTPS for real data. Initialize a fresh
+PostgreSQL workspace with the explicit `migrate` command. The application
+needs no local data volume or legacy import. No native application host or live deployment is selected yet.
 
 ## Verification commands
 
@@ -81,7 +80,7 @@ remain preferable to Dioxus fullstack server functions.
 
 ## Verification results — 2026-10-12
 
-These are historical results for the SQLite/local-file baseline.
+These are historical results for the earlier local-storage baseline.
 
 - Built the optimized Dioxus web bundle with Dioxus/CLI 0.7.10 and Rust 1.99.0.
   The current optimized Wasm module is about 505 KB before compression; this is

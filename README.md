@@ -8,7 +8,7 @@ editing, page composition, server-side saving, and image uploads. See
 This experiment does not implement the complete first milestone.
 
 The prototype now uses PostgreSQL and private S3-compatible image storage. See
-[Neon setup, personal access, SQLite import, and recovery](docs/development/neon-storage.md).
+[Neon setup, personal access, and recovery](docs/development/neon-storage.md).
 Docker and GitHub Actions verify disposable storage; live account activation and
 a card-free application host are still pending.
 

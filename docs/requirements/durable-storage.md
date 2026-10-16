@@ -14,8 +14,9 @@ for the existing four-panel prototype, without claiming the complete milestone.
   referenced images. Provide recoverable cleanup of abandoned uploads.
 - Protect the personal workspace, static UI, and images with server-side access
   control; credentials must remain outside the browser bundle and repository.
-- Provide an explicit, read-only SQLite import that verifies originals and
-  refuses to overwrite another target workspace. Schema migration is explicit.
+- Initialize a fresh PostgreSQL workspace through explicit schema migration.
+  No legacy data import or SQLite dependency is needed: the original storage
+  rig was never used (user clarification, 2026-10-16).
 - Verify the flow with disposable PostgreSQL and S3-compatible storage in CI.
 - Use no paid provisioning or payment card. Native application hosting and
   actual Neon account activation remain separate prerequisites.

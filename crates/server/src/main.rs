@@ -1,8 +1,5 @@
 use comic_server::{AppState, auth::Access, config, db, storage::S3Images};
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::PathBuf, sync::Arc};
 
 #[tokio::main]
 async fn main() {
@@ -17,16 +14,14 @@ async fn run() -> Result<(), String> {
     let command = args.first().map(String::as_str).unwrap_or("serve");
     if command == "--help" {
         println!(
-            "comic-server [serve | migrate | import-sqlite PATH | reconcile]\nSee docs/development/neon-storage.md for server-side configuration."
+            "comic-server [serve | migrate | reconcile]\nSee docs/development/neon-storage.md for server-side configuration."
         );
         return Ok(());
     }
-    if !matches!(command, "serve" | "migrate" | "import-sqlite" | "reconcile")
-        || args.len() > (if command == "import-sqlite" { 2 } else { 1 })
-    {
+    if !matches!(command, "serve" | "migrate" | "reconcile") || args.len() > 1 {
         return Err("Unknown command. Use comic-server --help.".into());
     }
-    let url = if matches!(command, "migrate" | "import-sqlite" | "reconcile") {
+    let url = if matches!(command, "migrate" | "reconcile") {
         std::env::var("COMIC_MIGRATION_DATABASE_URL")
             .ok()
             .filter(|v| !v.is_empty())
@@ -43,17 +38,6 @@ async fn run() -> Result<(), String> {
         db: pool,
         images: Arc::new(S3Images::from_env()?),
     };
-    if command == "import-sqlite" {
-        if std::env::var("COMIC_SOURCE_OFFLINE").as_deref() != Ok("1") {
-            return Err(
-                "Stop the old server and set COMIC_SOURCE_OFFLINE=1 before importing.".into(),
-            );
-        }
-        let source = args.get(1).ok_or("Specify the source SQLite path.")?;
-        comic_server::migration::import(&state, Path::new(source)).await.map_err(|_| "Import failed; source files are unchanged. Check target state, source integrity, and storage availability.")?;
-        println!("Import verified and complete.");
-        return Ok(());
-    }
     if command == "reconcile" {
         let count = comic_server::reconcile(&state)
             .await
@@ -67,7 +51,9 @@ async fn run() -> Result<(), String> {
         &config::required("COMIC_ORIGIN")?,
         config::local_mode(),
     )?;
-    db::read(&state.db).await.map_err(|_| "Workspace is unavailable. Run the explicit migrate command or finish the pending import.")?;
+    db::read(&state.db)
+        .await
+        .map_err(|_| "Workspace is unavailable. Run the explicit migrate command.")?;
     let public =
         PathBuf::from(std::env::var("COMIC_PUBLIC_DIR").unwrap_or_else(|_| "public".into()));
     if !public.join("index.html").is_file() {

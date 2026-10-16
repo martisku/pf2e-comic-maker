@@ -1,9 +1,7 @@
 CREATE TABLE workspace (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     revision BIGINT NOT NULL CHECK (revision >= 0),
-    data JSONB NOT NULL,
-    import_source TEXT,
-    import_complete BOOLEAN NOT NULL DEFAULT TRUE
+    data JSONB NOT NULL
 );
 
 -- An intent is committed before PUT. Never discard abandoned keys: a late PUT

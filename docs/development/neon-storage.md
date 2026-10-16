@@ -1,7 +1,8 @@
 # PostgreSQL and private image storage
 
-The prototype now uses PostgreSQL and S3-compatible object storage. It no longer
-creates SQLite or local image storage at startup. Neon is the selected provider;
+The prototype uses PostgreSQL and S3-compatible object storage, initialized
+from a fresh workspace. There is no local database or image data directory.
+Neon is the selected provider;
 actual Neon account validation and a free, card-free Rust host remain pending.
 The [architecture](../architecture/hosting-and-storage.md) and
 [implementation plan](../plans/durable-storage.md) describe the boundaries.
@@ -26,7 +27,7 @@ build variables. `.env` is ignored by Git and Docker builds.
 | Variable | Purpose |
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL application URI; use the pooled endpoint for Neon |
-| `COMIC_MIGRATION_DATABASE_URL` | Optional direct URI for migration/import/cleanup; otherwise these use `DATABASE_URL` |
+| `COMIC_MIGRATION_DATABASE_URL` | Optional direct URI for schema migration/cleanup; otherwise these use `DATABASE_URL` |
 | `COMIC_S3_ENDPOINT` | HTTPS endpoint for the branch's object storage |
 | `COMIC_S3_REGION` | Signing region provided for the endpoint |
 | `COMIC_S3_BUCKET` | Dedicated private bucket name |
@@ -54,9 +55,9 @@ docker run --rm --env-file .env -p 127.0.0.1:10000:10000 comic-server
 ```
 
 Run `migrate` using the direct database connection before starting the app.
+This applies the PostgreSQL schema and creates the initial sample workspace.
 SQLx versions the additive schema changes. Startup checks the existing workspace
-and fails if it is missing or an import is incomplete; it does not create a new
-empty database or run schema migrations implicitly. Keep DDL privileges on the
+and fails if it is missing; it does not create a new empty database or run schema migrations implicitly. Keep DDL privileges on the
 migration credential; the runtime needs DML access to workspace and upload tables.
 
 Open the configured origin through the host's HTTPS endpoint. The browser asks
@@ -91,52 +92,24 @@ docker run --rm --env-file .env comic-server reconcile
 Each run handles at most 100 keys. Pending intents older than one hour are first
 atomically abandoned, then deletion is attempted. Abandoned tombstones stay in
 PostgreSQL and are revisited, so a late PUT can be removed on a later run. Ready
-images are never selected. Cleanup is paused while an import is incomplete.
+images are never selected.
 No scheduler or provider lifecycle rule is assumed; Neon currently stores S3
 lifecycle configuration without enforcing expiration.
 
-## Import existing SQLite data
+## Fresh workspace and backups
 
-1. Stop the old SQLite server and all source writers. Keep a separate backup of
-   its entire data directory, including any SQLite WAL files and every image.
-2. Create a separate, pristine PostgreSQL target and run `migrate`. Do not point
-   import at an existing edited workspace. Configure a private target bucket.
-3. Mount the old data directory read-only and explicitly acknowledge it is offline:
+The original storage rig was never used, so no legacy data import is provided.
+Use the explicit `migrate` command above to initialize PostgreSQL before serving.
+Re-running it applies any pending schema versions and leaves saved workspace
+content intact.
 
-```sh
-docker run --rm --env-file .env \
-  --user "$(id -u):$(id -g)" \
-  --mount type=bind,src=/absolute/path/to/old-data,dst=/source,readonly \
-  -e COMIC_SOURCE_OFFLINE=1 \
-  comic-server import-sqlite /source/workspace.sqlite
-```
+SQLx has only its PostgreSQL driver enabled. Cargo may still list optional SQLx
+drivers in `Cargo.lock`; they are not part of the resolved server build. Check
+active dependencies with `cargo tree -p comic-server --edges normal,build`.
 
-The import process must be able to read the private source directory and files.
-The command above runs it as the source owner on Linux, without broadening file
-permissions. Normal application containers still run as UID 10001; use an
-appropriate UID or a readable offline backup copy on other systems.
-
-The source must be an offline SQLite database readable from a read-only mount;
-use a cleanly stopped/checkpointed copy if SQLite requires WAL recovery. Images
-are expected at `/source/images/<UUID>.<png|jpg|webp>`. Symlink images, missing
-files, invalid originals, duplicate IDs, and invalid workspace data are rejected
-before target mutation. The database is opened read-only; source data is never
-deleted or overwritten.
-
-Import fingerprints the snapshot and original image digests. It records all
-intents and a maintenance flag before uploading, verifies uploaded bytes, then
-publishes all records and the original revision in one database transaction.
-Normal serving refuses an incomplete import. Retry the same command after an
-interruption; do not change source files or reset target tables. Cleanup will
-not remove pending import objects. A different source or occupied target is
-rejected. Re-running a completed import verifies originals without overwriting
-edits made after import.
-
-Verify titles, revisions, panel placement, crop, selections, every alternative,
-and downloaded original bytes before retiring the old copy. The full F07 browser
-backup/restore feature is still separate work. Provider snapshots do not back up
-the database and objects as one consistent project; maintain recovery copies
-outside the same provider project.
+The full F07 browser backup/restore feature is still separate work. Provider
+snapshots do not back up the database and objects as one consistent project;
+maintain recovery copies outside the same provider project.
 
 ## Disposable local and CI verification
 

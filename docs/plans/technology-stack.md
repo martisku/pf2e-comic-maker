@@ -2,9 +2,9 @@
 
 Status: Draft
 
-Update 2026-10-15: the provisional SQLite/local-file hosting direction below is
-superseded by the selected [Neon PostgreSQL and object storage architecture](../architecture/hosting-and-storage.md).
-The prototype storage transition and read-only SQLite import are now implemented;
+Update 2026-10-16: storage follows the selected
+[Neon PostgreSQL and object storage architecture](../architecture/hosting-and-storage.md).
+The prototype PostgreSQL/S3 implementation is available;
 live Neon validation and the rest of this milestone proposal remain pending.
 
 ## Confirmed direction
@@ -40,12 +40,12 @@ No native mobile or desktop application is needed for the selected scope.
 | Browser UI | Dioxus web with responsive CSS | Rust components and state for editing, browsing, and composition |
 | Server | Axum with Tokio; evaluate Dioxus fullstack integration during the spike | Durable persistence, uploads, downloads, and future provider calls |
 | Shared data | Rust domain and request/response types with Serde | Consistent definitions across browser and server |
-| Database | SQLx with SQLite for a single persistent server | Transactions, relational integrity, and migrations without a separate database service |
-| Images | Project-owned files on persistent server storage | Keep original images outside database records; generate thumbnails separately |
+| Database | SQLx with PostgreSQL | Transactions, revisions, and explicit schema migrations independent of the app disk |
+| Images | Private S3-compatible object storage | Retain originals outside the application disk; generate thumbnails separately |
 | Backups | Versioned archive containing a JSON manifest and image files | Self-contained export and validated restoration |
 
-SQLite and file storage are provisional: managed hosting without persistent
-disks would favor PostgreSQL and object storage. Shared Rust types do not replace
+The original storage rig was never used; initialize a fresh PostgreSQL workspace.
+Shared Rust types do not replace
 server-side validation. Client builds must exclude database code and credentials.
 
 ## Feature implications
@@ -119,7 +119,7 @@ reported as saved before their files are durable.
 
 ## Open decisions
 
-- Hosting: one persistent server or managed database/object storage?
+- Hosting: which free, card-free native Rust host will run the app?
 - Access: private hosting or internet hosting with a personal access mechanism?
 - Dioxus integration: fullstack server functions or explicit Axum JSON routes?
 - Cross-device conflict handling and database/file recovery mechanics.

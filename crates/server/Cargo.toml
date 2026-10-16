@@ -9,7 +9,7 @@ serde.workspace = true
 serde_json.workspace = true
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "sqlite", "json", "uuid", "migrate", "macros"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "json", "uuid", "migrate", "macros"] }
 tower-http = { version = "0.6", features = ["fs", "limit"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 uuid = { version = "1", features = ["v4"] }
