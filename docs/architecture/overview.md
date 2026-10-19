@@ -2,10 +2,11 @@
 
 The server now implements the selected PostgreSQL/private object-storage
 architecture for the existing prototype. Live Neon account validation and a
-card-free application host remain pending. See
+live deployment remain pending. Render Free is selected and the accounts are
+reported created. See [deployment activation](../development/render-deployment.md),
 [hosting and storage architecture](hosting-and-storage.md),
 [the storage decision](../decisions/0001-postgres-and-object-storage.md), and
-[configuration, import, and verification](../development/neon-storage.md).
+[configuration and verification](../development/neon-storage.md).
 
 The repository now includes a small, explicitly authorized Dioxus web technical
 spike. The first milestone is still specified in requirements and is not fully
@@ -57,7 +58,9 @@ actual API operations check persistence.
 
 Docker and GitHub Actions now package and verify this architecture with
 disposable PostgreSQL/S3 fixtures and fresh-container retention checks. This
-does not activate a native application host or provision a paid service.
+can optionally initialize the schema and request the verified main commit on
+Render through a scoped hook. Activation requires provider settings and secrets;
+this does not provision a paid service or prove live readiness.
 Offline editing, multi-user/project authorization, thumbnails, and full project
 backup/restore remain separate scope.
 

@@ -12,8 +12,10 @@ images must survive application restarts, idle suspension, and deployments.
 
 Keep Rust, Dioxus, Axum, SQLx, and the Docker deployment model. Retain a practical
 path to another provider through standard PostgreSQL and supported S3 operations.
-The native Rust application host remains unselected: Render Free is a candidate,
-but deployment without card verification has not been confirmed for the account.
+Render Free is selected for the native Rust application. The user reports that
+Render and Neon are set up (2026-10-19); runtime configuration and live
+compatibility still need verification. See the
+[activation guide](../development/render-deployment.md).
 
 ## Current implementation versus target
 
@@ -24,8 +26,8 @@ local-storage rig was never used; initialize a fresh PostgreSQL workspace rather
 than importing legacy data. See [setup and recovery](../development/neon-storage.md).
 
 This implements the storage transition for the four-panel spike, not the full
-relational milestone. Live Neon compatibility, account activation, and a
-confirmed card-free native Rust host remain pending. The earlier disposable
+relational milestone. Live Neon compatibility and deployment activation
+remain pending. The earlier disposable
 Render configuration in PR #1 has not been merged into `main` and is superseded
 by the current provider-independent Docker/CI verification setup.
 
@@ -35,7 +37,7 @@ by the current provider-independent Docker/CI verification setup.
 | Rust / Axum / Tokio server | Serve the frontend and API; validate edits and images; enforce access; coordinate storage |
 | SQLx with PostgreSQL on Neon | Persist structured project data, revisions, image identities, and object keys |
 | Neon Object Storage | Persist original images and retained alternatives outside the database |
-| Docker application host | Run the Rust process with disposable local storage; provider still open |
+| Docker application host | Run the Rust process with disposable local storage; Render Free selected |
 | GitHub Actions | Verify the application, then deploy the verified source revision to the selected host |
 
 ```mermaid
@@ -150,10 +152,13 @@ formatting, tests, Clippy, and release builds. Retain the container startup
 verification proposed in PR #1 and add storage integration checks as part of
 the storage implementation.
 
-The current workflow verifies storage without deploying or using production
-credentials. Once a card-free application host is confirmed, add its deployment
-step and runtime secrets,
-deploy the verified commit, and check readiness. Schema migrations must be
+PR verification uses disposable storage without production credentials. Once
+configured, main runs explicitly migrate the schema with the verified image,
+then request that exact commit through a scoped Render deploy hook. The
+[activation guide](../development/render-deployment.md) lists the runtime
+settings, two GitHub secrets, and opt-in variable. Render auto-deploy must be off
+so it cannot bypass this sequence. Hook acceptance is distinct from a confirmed
+live release; check Events and the authenticated application flow. Schema migrations must be
 versioned, coordinated, and compatible with the deployed application; do not
 run destructive migrations implicitly on every process start.
 
@@ -187,12 +192,12 @@ The browser UI and project model should not depend on the provider's hostname.
    stale-write protection, upload failures, reads, and retained alternatives.
 3. Initialize a fresh PostgreSQL workspace using the explicit schema migration
    command. No old workspace or images need importing (confirmed 2026-10-16).
-4. Confirm a free application host that requires no payment card; configure
-   secrets and adapt GitHub Actions to that host.
+4. Configure the selected Render Free service and GitHub deployment secrets;
+   activate the implemented workflow and verify the live release.
 5. Verify that saved edits and images survive a fresh container, a redeploy,
    and idle suspension without any local data volume.
 
-Open decisions include the application host, live Neon validation,
+Open decisions include live Neon validation,
 relational milestone schema, and backup execution/retention. This document
 records the selected architecture; it does not authorize paid provisioning or
 claim existing user data has been migrated, full backup is implemented, or a

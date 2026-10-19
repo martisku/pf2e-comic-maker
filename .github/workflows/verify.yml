@@ -9,13 +9,15 @@ permissions:
   contents: read
 concurrency:
   group: storage-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Verify deployment barriers without credentials
+        run: python3 -m unittest discover -s scripts -p 'test_deploy_render.py'
       - uses: docker/setup-buildx-action@v3
       - name: Format, unit tests, Clippy, and frontend/server release builds
         uses: docker/build-push-action@v6
@@ -57,3 +59,18 @@ jobs:
         run: |
           docker rm -f comic-ci 2>/dev/null || true
           docker compose -f compose.storage.yaml down -v
+      - name: Migrate schema and request verified commit on Render
+        if: >-
+          success() && github.ref == 'refs/heads/main' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          vars.RENDER_DEPLOY_ENABLED == 'true'
+        timeout-minutes: 5
+        env:
+          COMIC_MIGRATION_DATABASE_URL: ${{ secrets.COMIC_MIGRATION_DATABASE_URL }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: python3 scripts/deploy-render.py
+      - name: Report deployment setup pending
+        if: >-
+          success() && github.ref == 'refs/heads/main' &&
+          vars.RENDER_DEPLOY_ENABLED != 'true'
+        run: echo 'Verification passed. Render deployment is disabled until its settings and GitHub secrets are configured.' >> "$GITHUB_STEP_SUMMARY"

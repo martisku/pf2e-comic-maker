@@ -3,7 +3,9 @@
 The prototype uses PostgreSQL and S3-compatible object storage, initialized
 from a fresh workspace. There is no local database or image data directory.
 Neon is the selected provider;
-actual Neon account validation and a free, card-free Rust host remain pending.
+the user has created Neon and Render accounts. See the
+[Render deployment guide](render-deployment.md) for activation; live validation
+remains pending.
 The [architecture](../architecture/hosting-and-storage.md) and
 [implementation plan](../plans/durable-storage.md) describe the boundaries.
 
@@ -130,8 +132,10 @@ down -v`. Never use these credentials, images, or HTTP mode for real data.
 `Verify durable storage` in GitHub Actions builds the full Docker image, runs
 the explicit integration tests, runs the desktop/phone browser workflow, and
 replaces the application container without a data volume to check retention.
-No production credentials or deployment hook are used. Deployment remains
-pending a confirmed card-free host and account setup.
+PR verification uses no production credentials. After configuration, main runs
+can explicitly migrate the schema and request the tested commit on Render. See
+[deployment activation](render-deployment.md); a successful hook request alone
+does not prove that the release is live.
 
 For native local development, configure equivalent server environment variables,
 run `cargo run -p comic-server -- migrate`, then `bash scripts/run-prototype.sh`.
