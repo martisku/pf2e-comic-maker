@@ -28,6 +28,34 @@ impl From<object_store::Error> for StoreError {
         }
     }
 }
+// Provider errors can embed signed URLs and credentials. Log only a fixed category.
+fn failure_category(error: &object_store::Error) -> &'static str {
+    match error {
+        object_store::Error::NotFound { .. } => "not_found",
+        object_store::Error::PermissionDenied { .. } => "permission_denied",
+        object_store::Error::Unauthenticated { .. } => "unauthenticated",
+        object_store::Error::NotSupported { .. } => "not_supported",
+        _ => "request_failed",
+    }
+}
+
+fn failure_diagnostic(operation: &str, key: &str, error: &object_store::Error) -> String {
+    let id = key
+        .strip_prefix("images/")
+        .and_then(|value| uuid::Uuid::parse_str(value).ok())
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| "unknown".into());
+    format!(
+        "IMAGE_STORAGE_FAILURE upload_id={id} operation={operation} category={}",
+        failure_category(error)
+    )
+}
+
+fn store_failure(operation: &str, key: &str, error: object_store::Error) -> StoreError {
+    eprintln!("{}", failure_diagnostic(operation, key, &error));
+    error.into()
+}
+
 impl From<StoreError> for ApiError {
     fn from(_: StoreError) -> Self {
         unavailable()
@@ -103,11 +131,16 @@ impl ImageStore for S3Images {
                     ..Default::default()
                 },
             )
-            .await?;
+            .await
+            .map_err(|error| store_failure("put", key, error))?;
         Ok(())
     }
     async fn read(&self, key: &str) -> Result<ObjectBody, StoreError> {
-        let object = self.store.get(&Path::from(key)).await?;
+        let object = self
+            .store
+            .get(&Path::from(key))
+            .await
+            .map_err(|error| store_failure("get", key, error))?;
         let size = object.meta.size as u64;
         Ok(ObjectBody {
             size,
@@ -117,7 +150,7 @@ impl ImageStore for S3Images {
     async fn delete(&self, key: &str) -> Result<(), StoreError> {
         match self.store.delete(&Path::from(key)).await {
             Ok(()) | Err(object_store::Error::NotFound { .. }) => Ok(()),
-            Err(error) => Err(error.into()),
+            Err(error) => Err(store_failure("delete", key, error)),
         }
     }
 }
@@ -144,4 +177,59 @@ pub async fn verify(
         return Err(StoreError::Unavailable);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn diagnostics_never_include_provider_details() {
+        let cases = [
+            (
+                object_store::Error::PermissionDenied {
+                    path: "private/object".into(),
+                    source: std::io::Error::other("https://key:secret@example.com?signed=token")
+                        .into(),
+                },
+                "permission_denied",
+            ),
+            (
+                object_store::Error::Unauthenticated {
+                    path: "private/object".into(),
+                    source: std::io::Error::other("credential=secret").into(),
+                },
+                "unauthenticated",
+            ),
+            (
+                object_store::Error::NotFound {
+                    path: "private/object".into(),
+                    source: std::io::Error::other("private endpoint and token").into(),
+                },
+                "not_found",
+            ),
+            (
+                object_store::Error::Generic {
+                    store: "S3",
+                    source: std::io::Error::other("private endpoint and token").into(),
+                },
+                "request_failed",
+            ),
+        ];
+        for (error, category) in cases {
+            let id = uuid::Uuid::new_v4();
+            let diagnostic = failure_diagnostic("put", &format!("images/{id}"), &error);
+            assert!(diagnostic.contains(&id.to_string()));
+            assert!(diagnostic.contains(&format!("category={category}")));
+            let untrusted_key = "images/https://key:secret@example.com?token=private";
+            let diagnostic = failure_diagnostic("put", untrusted_key, &error);
+            assert!(diagnostic.contains("upload_id=unknown"));
+            for sensitive in ["private", "secret", "token", "https://", "example.com"] {
+                assert!(
+                    !diagnostic.contains(sensitive),
+                    "unexpected provider detail: {sensitive}"
+                );
+            }
+        }
+    }
 }

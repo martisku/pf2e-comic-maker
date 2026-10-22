@@ -347,6 +347,7 @@ async fn upload_image(
     }
     let bytes = file.read_bytes().await.map_err(|e| e.to_string())?;
     let upload_id = uuid::Uuid::new_v4().to_string();
+    let mut last_failure = String::from("No server response");
     for attempt in 0..3 {
         let response = Request::post(&format!("/api/panels/{panel_id}/images"))
             .header("content-type", "application/octet-stream")
@@ -356,12 +357,13 @@ async fn upload_image(
             .map_err(|e| e.to_string())?
             .send()
             .await;
-        match response {
+        last_failure = match response {
             Ok(response) if response.ok() => {
                 if let Ok(snapshot) = response.json().await {
                     return Ok(snapshot);
                 }
                 // A lost/malformed success body is ambiguous too: reuse the ID.
+                format!("HTTP {}, invalid server response", response.status())
             }
             Ok(response) if response.status() < 500 => {
                 return Err(response
@@ -369,11 +371,14 @@ async fn upload_image(
                     .await
                     .unwrap_or_else(|_| "Upload rejected.".into()));
             }
-            _ => {}
-        }
+            Ok(response) => format!("HTTP {}", response.status()),
+            Err(_) => "Network request failed".into(),
+        };
         if attempt < 2 {
             gloo_timers::future::TimeoutFuture::new(500 * (attempt + 1)).await;
         }
     }
-    Err("Upload outcome is unknown. Reload saved work before selecting the file again.".into())
+    Err(format!(
+        "Upload outcome is unknown ({last_failure}; reference {upload_id}). Reload saved work before selecting the file again."
+    ))
 }

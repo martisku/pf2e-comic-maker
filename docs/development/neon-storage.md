@@ -98,6 +98,28 @@ images are never selected.
 No scheduler or provider lifecycle rule is assumed; Neon currently stores S3
 lifecycle configuration without enforcing expiration.
 
+## Diagnose an upload failure
+
+After bounded retries, the browser retains the final HTTP status or network
+failure and shows the upload reference UUID. An unknown outcome still requires
+reloading saved work before selecting the file again; copy unsaved text first.
+In Render Logs, search for `UPLOAD_FAILURE` and the reference UUID:
+
+- `reserve` / `replay`: database/catalog access failed.
+- `object_put_or_verification`: object upload could not be verified.
+- `finalize`: publishing the workspace/image transaction failed; the server
+  subsequently attempts to resolve its outcome before any cleanup.
+
+`IMAGE_STORAGE_FAILURE` lines with the same UUID identify `put`, `get`, or `delete` and a
+fixed category: `permission_denied`, `unauthenticated`, `not_found`,
+`not_supported`, or `request_failed`. These are provider error classifications,
+not proof of a specific account misconfiguration. For example, `not_found` on
+GET alone can mean the attempted PUT never created an object. Check the private
+bucket, credential scope and branch, endpoint, and signing region as applicable.
+Provider response bodies, error strings, object keys and credentials are never
+included in these diagnostic lines. Live provider configuration still needs
+verification; startup constructs the S3 client but does not contact the bucket.
+
 ## Fresh workspace and backups
 
 The original storage rig was never used, so no legacy data import is provided.

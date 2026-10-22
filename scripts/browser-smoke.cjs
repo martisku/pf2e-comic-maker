@@ -62,6 +62,28 @@ fs.mkdirSync(output, { recursive: true });
       ctx.fillStyle = '#cad6b5'; ctx.font = '24px serif'; ctx.fillText('Sample panel', 35, 125);
       return canvas.toDataURL('image/png').split(',')[1];
     }), 'base64');
+    // A failed server upload must retain HTTP evidence and one retry UUID,
+    // without reflecting an arbitrary provider/proxy response into the UI.
+    const beforeFailedUpload = await read();
+    const failedUploadIds = [];
+    await page.route('**/api/panels/*/images', route => {
+      failedUploadIds.push(route.request().headers()['x-comic-upload-id']);
+      return route.fulfill({ status: 503, body: 'provider-secret-sentinel' });
+    });
+    await editor.locator('input[type=file]').setInputFiles({ name: 'unavailable.png', mimeType: 'image/png', buffer: png });
+    await page.getByRole('alert').waitFor();
+    const uploadFailure = await page.getByRole('alert').innerText();
+    assert.match(uploadFailure, /HTTP 503/);
+    assert.equal(failedUploadIds.length, 3);
+    assert(failedUploadIds[0]);
+    assert(failedUploadIds.every(id => id === failedUploadIds[0]));
+    assert(uploadFailure.includes(failedUploadIds[0]));
+    assert(!uploadFailure.includes('provider-secret-sentinel'));
+    assert.deepEqual(await read(), beforeFailedUpload);
+    await page.unroute('**/api/panels/*/images');
+    await page.reload();
+    await saved();
+
     for (let id = 1; id <= 4; id++) {
       await page.locator('.panel-card').nth(id - 1).click();
       await editor.locator('input[type=file]').setInputFiles({ name: `panel-${id}.png`, mimeType: 'image/png', buffer: png });
@@ -176,7 +198,7 @@ fs.mkdirSync(output, { recursive: true });
     await second.close();
 
     assert.deepEqual(errors, [], 'Browser runtime errors');
-    console.log('PASS: autosave/reload, PNG/JPEG/WebP import, size/format rejection, independent image replacement, alternatives, crop, layouts, mobile overflow, save failure/retry, and stale-write conflict');
+    console.log('PASS: autosave/reload, PNG/JPEG/WebP import, size/format rejection, independent image replacement, alternatives, crop, layouts, mobile overflow, save failure/retry, upload failure diagnostics, and stale-write conflict');
   } finally {
     await browser.close();
   }

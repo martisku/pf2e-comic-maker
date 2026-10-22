@@ -122,8 +122,12 @@ pub async fn persist_upload(
     intent: &db::Intent,
     bytes: Bytes,
 ) -> Result<Snapshot, ApiError> {
-    if db::reserve(&state.db, intent).await? {
-        return db::replay(&state.db, intent.id).await;
+    if db::reserve(&state.db, intent).await.inspect_err(|error| {
+        log_upload_failure(intent.id, "reserve", error);
+    })? {
+        return db::replay(&state.db, intent.id).await.inspect_err(|error| {
+            log_upload_failure(intent.id, "replay", error);
+        });
     }
     let written = state
         .images
@@ -141,19 +145,31 @@ pub async fn persist_upload(
     {
         // Unknown outcome stays pending. Retrying this UUID is safe; cleanup
         // later abandons expired intents before attempting object deletion.
-        return Err(error::unavailable());
+        let error = error::unavailable();
+        log_upload_failure(intent.id, "object_put_or_verification", &error);
+        return Err(error);
     }
     match db::finish(&state.db, intent.id).await {
         Ok(snapshot) => Ok(snapshot),
-        Err(error) => match db::abandon(&state.db, intent.id).await {
-            Ok(db::Abandon::Ready) => db::replay(&state.db, intent.id).await,
-            Ok(db::Abandon::Key(key)) => {
-                let _ = state.images.delete(&key).await;
-                Err(error)
+        Err(error) => {
+            log_upload_failure(intent.id, "finalize", &error);
+            match db::abandon(&state.db, intent.id).await {
+                Ok(db::Abandon::Ready) => db::replay(&state.db, intent.id).await,
+                Ok(db::Abandon::Key(key)) => {
+                    let _ = state.images.delete(&key).await;
+                    Err(error)
+                }
+                _ => Err(error),
             }
-            _ => Err(error),
-        },
+        }
     }
+}
+
+fn log_upload_failure(id: Uuid, stage: &str, error: &ApiError) {
+    eprintln!(
+        "UPLOAD_FAILURE upload_id={id} stage={stage} http_status={}",
+        error.0.as_u16()
+    );
 }
 
 async fn image(

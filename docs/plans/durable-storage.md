@@ -124,3 +124,24 @@ work. The resolved server dependency tree has no SQLite driver. Cargo.lock may
 retain optional SQLx driver metadata, which is not compiled into the server.
 Shell syntax and diff whitespace checks passed. Full release/browser verification
 continues in the PR's GitHub Actions workflow after push.
+
+## Upload diagnostics correction — 2026-10-22
+
+The live app returned HTTP 503, but browser retries replaced that evidence with
+an undifferentiated unknown-outcome message. Provider errors also lost their
+category before anything reached Render logs. The real provider cause is not
+yet known; no credentials or live account access are available here.
+
+Use the simplified bug-fix process: retain the final HTTP/network failure and
+upload UUID in the browser, log safe S3 error categories and upload stages on
+the server, and document how to locate the matching Render log. Never print
+provider error strings, response bodies, endpoints, keys or credentials. Keep
+UUID retry identity and all ambiguous-write/reconciliation behavior intact.
+Verify with native tests, native/Wasm Clippy, formatting, and existing CI.
+This improves diagnosis; it does not claim the live storage issue is fixed.
+
+Local verification: five unit tests, native all-targets Clippy, Wasm frontend
+Clippy, Rust formatting, JavaScript syntax, documentation links and diff checks
+passed. CI additionally exercises a mocked HTTP 503 upload in Chromium, checking
+three retries share one UUID, the status/reference remain visible, provider body
+text stays hidden, and saved state is unchanged. Live cause remains unverified.
