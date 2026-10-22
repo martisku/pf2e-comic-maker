@@ -7,6 +7,11 @@ editing, page composition, server-side saving, and image uploads. See
 [setup and prototype limits](docs/development/dioxus-prototype.md).
 This experiment does not implement the complete first milestone.
 
+The interface is English-only and uses the illustrated **Story Archive** design:
+forest and ink surfaces, brass details, and ivory comic pages. The workspace
+overview and composition editor share the same server-saved project data. See
+[the approved design direction](docs/requirements/fantasy-workspace-design.md).
+
 The prototype now uses PostgreSQL and private S3-compatible image storage. See
 [Neon setup, personal access, and recovery](docs/development/neon-storage.md).
 Docker and GitHub Actions verify disposable storage; live account activation and

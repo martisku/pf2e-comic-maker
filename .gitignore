@@ -7,3 +7,6 @@
 
 # Local Python verification scripts
 __pycache__/
+
+# Local implementation and verification scratch
+/work/

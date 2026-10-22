@@ -44,6 +44,12 @@ fs.mkdirSync(output, { recursive: true });
     await saved();
     await page.screenshot({ path: `${output}/desktop.png`, fullPage: true });
 
+    await page.getByRole('button', { name: 'Story overview', exact: false }).click();
+    await page.getByRole('heading', { name: 'Your story, unfolding.' }).waitFor();
+    assert.equal(await page.locator('.story-card').count(), 4);
+    assert(await page.locator('.archive-art').evaluate(async image => { await image.decode(); return image.naturalWidth > 0; }), 'Bundled overview artwork failed to load');
+    await page.screenshot({ path: `${output}/overview-desktop.png`, fullPage: true });
+    await page.locator('.story-card').first().click();
     const editor = page.getByRole('complementary', { name: 'Panel editor' });
     assert.equal(await editor.getByLabel('Page position').inputValue(), '0');
     await editor.getByLabel('Title', { exact: true }).fill('Wick listens');
@@ -100,7 +106,8 @@ fs.mkdirSync(output, { recursive: true });
     await saved();
     assert.equal(await editor.getByLabel('Selected image').inputValue(), afterReplacement.workspace.panels[2].selected_image);
     const firstImage = afterReplacement.workspace.panels[2].images[0].id;
-    await editor.getByLabel('Selected image').selectOption(firstImage);
+    await editor.getByRole('button', { name: 'Select image alternative 1', exact: true }).click();
+    assert.equal(await editor.getByLabel('Selected image').inputValue(), firstImage);
     await waitForData(s => s.workspace.panels[2].selected_image === firstImage);
     await saved();
     await editor.getByLabel('Horizontal crop').evaluate(input => {
@@ -174,6 +181,12 @@ fs.mkdirSync(output, { recursive: true });
     await waitForData(s => s.workspace.panels[0].dialogue === 'Who goes there?');
     await saved();
     await page.screenshot({ path: `${output}/phone.png`, fullPage: true });
+    await page.getByRole('button', { name: 'Story overview', exact: false }).click();
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile overview overflows');
+    assert.match(await page.locator('.story-card').first().innerText(), /Wick listens/);
+    await page.screenshot({ path: `${output}/overview-phone.png`, fullPage: true });
+    await page.getByRole('navigation', { name: 'Workspace views' }).getByRole('button', { name: 'Page composition', exact: false }).click();
+    assert.equal(await editor.getByLabel('Dialogue').inputValue(), 'Who goes there?');
 
     await page.route('**/api/workspace', route => route.abort());
     await editor.getByLabel('Dialogue').fill('Keep this edit when saving fails.');
@@ -191,10 +204,10 @@ fs.mkdirSync(output, { recursive: true });
     await editor.getByLabel('Title', { exact: true }).fill('Latest phone edit');
     await waitForData(s => s.workspace.panels[0].title === 'Latest phone edit');
     await saved();
-    await second.getByRole('complementary').getByLabel('Title', { exact: true }).fill('Stale desktop edit');
+    await second.getByRole('complementary', { name: 'Panel editor' }).getByLabel('Title', { exact: true }).fill('Stale desktop edit');
     await second.getByRole('alert').waitFor();
     assert.equal((await read()).workspace.panels[0].title, 'Latest phone edit');
-    assert.equal(await second.getByRole('complementary').getByLabel('Title', { exact: true }).inputValue(), 'Stale desktop edit');
+    assert.equal(await second.getByRole('complementary', { name: 'Panel editor' }).getByLabel('Title', { exact: true }).inputValue(), 'Stale desktop edit');
     await second.close();
 
     assert.deepEqual(errors, [], 'Browser runtime errors');

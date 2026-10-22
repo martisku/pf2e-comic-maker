@@ -111,3 +111,28 @@ retained the same workspace and original image bytes with no mounted data
 volume. See the [implementation results](../plans/durable-storage.md) and
 [operational setup](neon-storage.md). Live Neon validation, a card-free native
 host, and physical-phone/Safari/Firefox verification remain pending.
+
+## Illustrated archive design
+
+The English-only interface uses the approved Story Archive direction: forest/ink
+surfaces, brass accents, serif headings, and ivory comic pages. The editor stays
+at the initial route; the sidebar opens a live overview of the same saved panels.
+Overview cards use selected project images or explicit empty states. The bundled
+fantasy illustration is decorative atmosphere art and never enters project data.
+Visual image alternatives select the same retained images as the dropdown.
+
+The standalone design study's character library and chapter management screens
+are not part of the current domain model. This integration preserves the existing
+server persistence and limits; it does not add browser-local project storage.
+See [the design plan](../plans/fantasy-workspace-design.md).
+
+
+## Design verification — 2026-10-22
+
+The illustrated archive integration passed formatting, native unit tests,
+native/Wasm Clippy, native release compilation, optimized frontend bundling,
+and Chromium desktop/phone checks against disposable PostgreSQL/S3. The extended
+browser workflow also verified overview navigation and visual image alternatives.
+A fresh runtime container retained the same saved data and original image bytes.
+See the [design implementation record](../plans/fantasy-workspace-design.md#verification--2026-10-22)
+for the local Docker disk-space limitation and test-runtime configuration.
