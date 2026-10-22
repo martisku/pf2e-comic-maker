@@ -22,4 +22,5 @@ if [[ ! -f "$COMIC_PUBLIC_DIR/index.html" ]]; then
     printf '%s\n' "Dioxus output was not found at $COMIC_PUBLIC_DIR" >&2
     exit 1
 fi
+cp "$project_root/crates/web/assets/archive-forest.png" "$COMIC_PUBLIC_DIR/archive-forest.png"
 cargo run --locked -p comic-server

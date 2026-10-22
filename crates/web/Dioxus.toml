@@ -3,4 +3,4 @@ name = "comic-web"
 default_platform = "web"
 
 [web.app]
-title = "PF2E Comic Studio"
+title = "Story Archive · PF2E Comic Maker"

@@ -3,6 +3,8 @@ use dioxus::html::FileData;
 use dioxus::prelude::*;
 use gloo_net::http::Request;
 
+const ARCHIVE_ART: &str = "/archive-forest.png";
+
 fn main() {
     dioxus::launch(App);
 }
@@ -62,6 +64,7 @@ fn App() -> Element {
     let mut status = use_signal(|| "Loading workspace…".to_string());
     let mut error = use_signal(|| None::<String>);
     let mut selected = use_signal(|| 1u32);
+    let mut overview = use_signal(|| false);
 
     // One serialized save loop: edits made while a request runs remain dirty.
     use_hook(move || {
@@ -122,10 +125,30 @@ fn App() -> Element {
 
     rsx! {
         style { {include_str!("../assets/studio.css")} }
+        aside { class: "archive-sidebar", "aria-label": "Workspace navigation",
+            div { class: "archive-brand", span { class: "archive-sigil", "✧" }
+                div { strong { "STORY ARCHIVE" } small { "PF2E · COMIC MAKER" } }
+            }
+            div { class: "archive-project", p { class: "eyebrow", "YOUR STORY WORLD" }
+                strong { if let Some(ref workspace) = workspace { "{workspace.title}" } else { "Your comic workspace" } }
+                small { "A Pathfinder story in the making" }
+            }
+            nav { "aria-label": "Workspace views",
+                button { class: if overview() { "archive-nav active" } else { "archive-nav" }, "aria-pressed": overview(), onclick: move |_| overview.set(true),
+                    span { "◇" } "Story overview"
+                }
+                button { class: if !overview() { "archive-nav active" } else { "archive-nav" }, "aria-pressed": !overview(), onclick: move |_| overview.set(false),
+                    span { "▤" } "Page composition"
+                }
+            }
+            div { class: "archive-motto", span { "◇" } p { "Every story begins" br {} "with a single panel." }
+                small { "YOUR COMIC WORKSPACE" }
+            }
+        }
         div { class: "studio",
             header { class: "topbar",
-                div { class: "brand", span { class: "mark", "P" } div { strong { "PF2E" } span { "COMIC STUDIO" } } }
-                div { class: "topbar-right", span { class: "prototype", "Dioxus prototype" }
+                div { class: "breadcrumb", span { "Workspace" } span { class: "breadcrumb-divider", "/" } strong { if overview() { "Story overview" } else { "Page composition" } } }
+                div { class: "topbar-right", span { class: "prototype", "WORKING EDITION" }
                     span { role: "status", class: if error().is_some() { "save-status failed" } else { "save-status" }, "{visible_status}" }
                 }
             }
@@ -156,8 +179,8 @@ fn App() -> Element {
             }
             if let Some(workspace) = workspace {
                 section { class: "project-heading",
-                    div { p { class: "eyebrow", "CHAPTER WORKSPACE · 01" }
-                        h1 { "The story takes shape." }
+                    div { p { class: "eyebrow", "YOUR ILLUSTRATED STORY" }
+                        h1 { if overview() { "Your story, unfolding." } else { "The story takes shape." } }
                         input { class: "project-title", "aria-label": "Project title", value: "{workspace.title}",
                             oninput: move |event| {
                                 if let Some(snapshot) = state.write().as_mut() { snapshot.workspace.title = event.value(); dirty.set(true); }
@@ -166,9 +189,51 @@ fn App() -> Element {
                     }
                     p { class: "intro", "Plan each moment. Arrange the page. Replace only the image you want to change." }
                 }
-                main { class: "workspace",
+                if overview() {
+                    main { class: "story-overview", "aria-label": "Story overview",
+                        section { class: "archive-hero",
+                            img { class: "archive-art", src: ARCHIVE_ART, alt: "" }
+                            div { class: "hero-copy", p { class: "eyebrow", "CONTINUE YOUR STORY" }
+                                h2 { "{workspace.title}" }
+                                p { "A world waiting to be imagined. A story told one panel at a time." }
+                                button { class: "primary-button", onclick: move |_| overview.set(false), "Open page composition →" }
+                            }
+                            span { class: "art-credit", "ATMOSPHERE ART · NOT PROJECT CONTENT" }
+                        }
+                        div { class: "overview-heading", h2 { "Moments in your story" }
+                            span { "{workspace.panels.len()} panels · one working page" }
+                        }
+                        div { class: "story-grid",
+                            for panel in workspace.panels.iter() {
+                                {
+                                    let id = panel.id;
+                                    let position = workspace.slots.iter().position(|p| *p == Some(id));
+                                    rsx! {
+                                        button { class: "story-card", onclick: move |_| { selected.set(id); overview.set(false); },
+                                            div { class: "story-card-art",
+                                                if let Some(url) = panel.image_url() {
+                                                    img { src: "{url}", alt: "", loading: "lazy" }
+                                                } else {
+                                                    span { class: "story-placeholder", "◇" } small { "Your illustration belongs here" }
+                                                }
+                                            }
+                                            div { class: "story-card-copy",
+                                                p { class: "eyebrow", if let Some(slot) = position { "POSITION {slot + 1}" } else { "UNPLACED" } }
+                                                h3 { "{panel.title}" }
+                                                p { class: "story-excerpt", "{panel.action}" }
+                                                span { class: "story-card-footer", span { "{panel.images.len()} image alternatives" } span { "Open panel →" } }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        p { class: "archive-note", "✧  Your panels, images, and planning notes belong to the same saved workspace." }
+                    }
+                }
+                main { class: if overview() { "workspace is-hidden" } else { "workspace" },
                     nav { class: "panel-list", "aria-label": "Chapter panels",
-                        div { class: "section-label", span { "PANELS" } span { "04" } }
+                        div { class: "section-label", span { "PANELS" } span { "{workspace.panels.len()}" } }
                         for panel in workspace.panels.iter() {
                             {
                                 let id = panel.id;
@@ -177,7 +242,7 @@ fn App() -> Element {
                                 rsx! {
                                     button { class: if is_active { "panel-card active" } else { "panel-card" },
                                         onclick: move |_| selected.set(id), "aria-pressed": is_active,
-                                        span { class: "panel-number", "0{id}" }
+                                        span { class: "panel-number", if let Some(slot) = position { "{slot + 1}" } else { "◇" } }
                                         div { strong { "{panel.title}" }
                                             small { if let Some(slot) = position { "Position {slot + 1}" } else { "Unplaced" } }
                                         }
@@ -240,7 +305,7 @@ fn App() -> Element {
                             let upload_disabled = busy() || dirty() || error().is_some();
                             rsx! {
                                 aside { class: "editor", "aria-label": "Panel editor",
-                                    p { class: "eyebrow", "PANEL 0{id}" } h2 { "Shape this moment" }
+                                    p { class: "eyebrow", if let Some(slot) = position { "POSITION {slot + 1}" } else { "UNPLACED PANEL" } } h2 { "Shape this moment" }
                                     label { "Title"
                                         input { value: "{panel.title}", oninput: move |e| edit_panel(state, dirty, id, |p| p.title = e.value()) }
                                     }
@@ -295,6 +360,22 @@ fn App() -> Element {
                                         small { "PNG, JPEG or WebP · up to 20 MB" }
                                         if dirty() { small { "Your edits are saving before upload is available." } }
                                         if !panel.images.is_empty() {
+                                            div { class: "image-alternatives", role: "group", "aria-label": "Image alternatives",
+                                                for (index, image) in panel.images.iter().enumerate() {
+                                                    {
+                                                        let image_id = image.id.clone();
+                                                        let is_selected = panel.selected_image.as_ref() == Some(&image.id);
+                                                        rsx! {
+                                                            button { class: if is_selected { "image-alternative active" } else { "image-alternative" },
+                                                                "aria-label": "Select image alternative {index + 1}", "aria-pressed": is_selected,
+                                                                onclick: move |_| edit_panel(state, dirty, id, |p| p.selected_image = Some(image_id.clone())),
+                                                                img { src: "{image.url}", alt: "", loading: "lazy" }
+                                                                span { "Image {index + 1}" }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                             label { "Selected image"
                                                 select { value: panel.selected_image.clone().unwrap_or_default(),
                                                     oninput: move |e| edit_panel(state, dirty, id, |p| p.selected_image = Some(e.value())),
@@ -329,7 +410,7 @@ fn App() -> Element {
             } else {
                 div { class: "loading", "{status}" }
             }
-            footer { "A small working study in Rust + Dioxus. Sample workspace; milestone features are still to come." }
+            footer { span { "PF2E COMIC MAKER · STORY ARCHIVE" } span { "The story is yours. Give it shape. ✧" } }
         }
     }
 }

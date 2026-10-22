@@ -22,7 +22,8 @@ WORKDIR /app/crates/web
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export SSL_CERT_FILE=/run/secrets/proxy_ca CARGO_HTTP_CAINFO=/run/secrets/proxy_ca; fi; \
     dx build --web --release --debug-symbols false --locked -p comic-web && \
-    test -f /app/target/dx/comic-web/release/web/public/index.html
+    test -f /app/target/dx/comic-web/release/web/public/index.html && \
+    cp assets/archive-forest.png /app/target/dx/comic-web/release/web/public/archive-forest.png
 WORKDIR /app
 
 FROM debian:trixie-slim AS runtime
