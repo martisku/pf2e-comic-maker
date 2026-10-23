@@ -1,6 +1,9 @@
 # Implementation plan: Reusable assets and panel associations
 
-Status: Draft
+Status: Approved
+
+Reviewed by the orchestrator on 2026-10-23 under the user’s explicit instruction
+to plan and then implement with agents.
 
 ## Requirements and scope
 
@@ -34,7 +37,10 @@ Kinds and identities are immutable in the editor. PanelAssets stores character
 IDs, equipment IDs and one optional location ID. Resolve all references within
 the containing workspace; never fetch definitions from another project. Reject
 duplicate identities, missing references, kind mismatches, repeated associations,
-invalid IDs, blank names and oversized text. Bound collection sizes. Non-character
+invalid IDs, blank names and oversized text. Validate canonical UUID syntax
+without adding a dependency. Bound the library to 200 records, names to 500 bytes,
+descriptions/design notes to 20,000 bytes each and character size to 500 bytes;
+the maximal asset text payload stays below the existing 20 MB request limit. Non-character
 assets cannot carry a character-size value.
 
 Use a model assets.rs module with Workspace helpers to find all panels using an
@@ -49,8 +55,9 @@ Existing project read/write endpoints carry the added fields. The orchestration
 integration calls asset validation from Workspace.validate(). No asset-specific
 HTTP routes are required. The existing image upload catalog and selection fields
 are untouched. Reject dangling references on any write, including deletion via
-a crafted request. Existing clients must be refreshed with the new application;
-mixed-version editing can discard additive fields and is not supported.
+a crafted request. The integrated chapter/model change adds a schema version: writes from old
+clients missing the current version must be rejected, preventing additive fields
+from silently disappearing. The chapter agent owns this compatibility barrier.
 
 ## Frontend
 
@@ -64,8 +71,8 @@ to unblock deletion.
 Add a PanelAssetsEditor component to the panel editor. Offer multiple character
 and equipment checkboxes and one location selector using current-project records
 only. Selected definitions are available inline, including current descriptions,
-design notes and character size. Explain that reference images are not available
-until F05; do not present a fake reference-image feature. Use the existing guarded
+design notes and character size. Omit reference controls until reference images exist; do not expose internal
+feature identifiers in the UI. Use the existing guarded
 autosave so switching projects cannot save records into another project.
 
 ## Ownership and file changes
