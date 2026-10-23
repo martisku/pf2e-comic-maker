@@ -94,7 +94,10 @@ impl Default for Workspace {
 
 impl Workspace {
     pub fn blank(title: String) -> Self {
-        let mut workspace = Self { title, ..Self::default() };
+        let mut workspace = Self {
+            title,
+            ..Self::default()
+        };
         for panel in &mut workspace.panels {
             panel.action.clear();
         }
@@ -181,7 +184,10 @@ pub struct ProjectSnapshot {
 
 impl ProjectSnapshot {
     pub fn legacy(self) -> Snapshot {
-        Snapshot { revision: self.revision, workspace: self.workspace }
+        Snapshot {
+            revision: self.revision,
+            workspace: self.workspace,
+        }
     }
 }
 
@@ -217,7 +223,8 @@ mod tests {
         let workspace = Workspace::blank("My project".into());
         assert_eq!(workspace.title, "My project");
         assert!(workspace.panels.iter().all(|panel| panel.action.is_empty()
-            && panel.dialogue.is_empty() && panel.images.is_empty()));
+            && panel.dialogue.is_empty()
+            && panel.images.is_empty()));
         workspace.validate().unwrap();
     }
 

@@ -1,7 +1,10 @@
 use comic_model::{ORIGINAL_PROJECT_ID, ProjectCreate, ProjectSnapshot, ProjectSummary};
 use dioxus::prelude::*;
 use gloo_net::http::{Request, Response};
-use std::{cell::{Cell, RefCell}, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -24,9 +27,15 @@ impl Target {
 }
 
 fn location_target() -> Target {
-    let Some(window) = web_sys::window() else { return Target::Invalid };
-    let Ok(search) = window.location().search() else { return Target::Invalid };
-    let Ok(params) = web_sys::UrlSearchParams::new_with_str(&search) else { return Target::Invalid };
+    let Some(window) = web_sys::window() else {
+        return Target::Invalid;
+    };
+    let Ok(search) = window.location().search() else {
+        return Target::Invalid;
+    };
+    let Ok(params) = web_sys::UrlSearchParams::new_with_str(&search) else {
+        return Target::Invalid;
+    };
     if let Some(project) = params.get("project") {
         return match uuid::Uuid::parse_str(&project) {
             Ok(id) => Target::Open(id.to_string()),
@@ -51,28 +60,60 @@ fn write_url(target: &Target, push: bool) {
     if let Some(window) = web_sys::window()
         && let Ok(history) = window.history()
     {
-        let index = HISTORY_INDEX.with(|cursor| { let next = cursor.get() + i32::from(push); cursor.set(next); next });
+        let index = HISTORY_INDEX.with(|cursor| {
+            let next = cursor.get() + i32::from(push);
+            cursor.set(next);
+            next
+        });
         let _ = if push {
-            history.push_state_with_url(&JsValue::from_f64(f64::from(index)), "", Some(&target.url()))
+            history.push_state_with_url(
+                &JsValue::from_f64(f64::from(index)),
+                "",
+                Some(&target.url()),
+            )
         } else {
-            history.replace_state_with_url(&JsValue::from_f64(f64::from(index)), "", Some(&target.url()))
+            history.replace_state_with_url(
+                &JsValue::from_f64(f64::from(index)),
+                "",
+                Some(&target.url()),
+            )
         };
     }
 }
 
 async fn decode<T: serde::de::DeserializeOwned>(response: Response) -> Result<T, String> {
     if !response.ok() {
-        return Err(response.text().await.unwrap_or_else(|_| "Request failed.".into()));
+        return Err(response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Request failed.".into()));
     }
-    response.json().await.map_err(|_| "Invalid server response. Reload saved work before retrying.".into())
+    response
+        .json()
+        .await
+        .map_err(|_| "Invalid server response. Reload saved work before retrying.".into())
 }
 
 pub async fn load(project: &str) -> Result<ProjectSnapshot, String> {
-    decode(Request::get(&format!("/api/projects/{project}")).send().await.map_err(|_| "Could not load project. Try again.".to_string())?).await
+    decode(
+        Request::get(&format!("/api/projects/{project}"))
+            .send()
+            .await
+            .map_err(|_| "Could not load project. Try again.".to_string())?,
+    )
+    .await
 }
 
 async fn save(snapshot: &ProjectSnapshot) -> Result<ProjectSnapshot, String> {
-    decode(Request::put(&format!("/api/projects/{}", snapshot.project_id)).json(snapshot).map_err(|_| "Could not encode project.".to_string())?.send().await.map_err(|_| "Saving failed. Your edits remain on screen.".to_string())?).await
+    decode(
+        Request::put(&format!("/api/projects/{}", snapshot.project_id))
+            .json(snapshot)
+            .map_err(|_| "Could not encode project.".to_string())?
+            .send()
+            .await
+            .map_err(|_| "Saving failed. Your edits remain on screen.".to_string())?,
+    )
+    .await
 }
 
 #[derive(Clone, PartialEq)]
@@ -87,7 +128,9 @@ fn commit_url(navigation: &Navigation) {
         let previous = HISTORY_INDEX.with(|cursor| cursor.replace(index));
         if index != previous {
             SUPPRESS_POP.with(|flag| flag.set(true));
-            if let Some(window) = web_sys::window() && let Ok(history) = window.history() {
+            if let Some(window) = web_sys::window()
+                && let Ok(history) = window.history()
+            {
                 let _ = history.go_with_delta(index - previous);
             }
         }
@@ -109,22 +152,47 @@ pub struct Session {
     view: Signal<Target>,
     pending: Signal<Option<Navigation>>,
     flushing: Signal<bool>,
+    failed_navigation: Signal<Option<Navigation>>,
 }
 
 impl Session {
-    pub fn dialog_open(self) -> bool { self.pending.read().is_some() }
-    pub fn show_list(self) -> bool { matches!(*self.view.read(), Target::List) }
-    pub fn show_new(self) -> bool { matches!(*self.view.read(), Target::New) }
-    pub fn invalid(self) -> bool { matches!(*self.view.read(), Target::Invalid) }
-    pub fn loading(self) -> bool { *self.loading.read() }
-    pub fn activation(self) -> u64 { *self.generation.peek() }
+    pub fn dialog_open(self) -> bool {
+        self.pending.read().is_some()
+    }
+    pub fn show_list(self) -> bool {
+        matches!(*self.view.read(), Target::List)
+    }
+    pub fn show_new(self) -> bool {
+        matches!(*self.view.read(), Target::New)
+    }
+    pub fn invalid(self) -> bool {
+        matches!(*self.view.read(), Target::Invalid)
+    }
+    pub fn loading(self) -> bool {
+        *self.loading.read()
+    }
+    pub fn activation(self) -> u64 {
+        *self.generation.peek()
+    }
 
-    pub fn request(self, target: Target) { self.navigate(Navigation { target, push: true, history_index: None }); }
+    pub fn request(self, target: Target) {
+        self.navigate(Navigation {
+            target,
+            push: true,
+            history_index: None,
+        });
+    }
 
     fn navigate(mut self, navigation: Navigation) {
-        if *self.busy.peek() { return; }
+        if *self.busy.peek() {
+            return;
+        }
         if *self.uncertain.peek() {
-            let reloading = self.state.peek().as_ref().is_some_and(|s| navigation.target == Target::Open(s.project_id.clone()));
+            let reloading = self
+                .state
+                .peek()
+                .as_ref()
+                .is_some_and(|s| navigation.target == Target::Open(s.project_id.clone()));
             if !reloading {
                 self.error.set(Some("The upload outcome is unknown. Reload saved work in this project before switching.".into()));
                 return;
@@ -138,9 +206,12 @@ impl Session {
     }
 
     fn activate(mut self, navigation: Navigation) {
-        if *self.busy.peek() { return; }
+        if *self.busy.peek() {
+            return;
+        }
         self.pending.set(None);
         self.flushing.set(false);
+        self.failed_navigation.set(None);
         match &navigation.target {
             Target::Open(id) => {
                 let id = id.clone();
@@ -150,7 +221,9 @@ impl Session {
                 let generation = self.activation();
                 spawn(async move {
                     let result = load(&id).await;
-                    if self.activation() != generation { return; }
+                    if self.activation() != generation {
+                        return;
+                    }
                     match result {
                         Ok(snapshot) if snapshot.project_id == id => {
                             self.generation.set(generation + 1);
@@ -162,8 +235,16 @@ impl Session {
                             self.view.set(navigation.target.clone());
                             commit_url(&navigation);
                         }
-                        Ok(_) => { self.error.set(Some("The server returned a different project. Open Projects and try again.".into())); self.status.set("Load failed".into()); }
-                        Err(message) => { self.error.set(Some(message)); self.status.set("Load failed".into()); }
+                        Ok(_) => {
+                            self.failed_navigation.set(Some(navigation.clone()));
+                            self.error.set(Some("The server returned a different project. Open Projects and try again.".into()));
+                            self.status.set("Load failed".into());
+                        }
+                        Err(message) => {
+                            self.failed_navigation.set(Some(navigation.clone()));
+                            self.error.set(Some(message));
+                            self.status.set("Load failed".into());
+                        }
                     }
                     self.loading.set(false);
                     self.busy.set(false);
@@ -171,7 +252,9 @@ impl Session {
             }
             Target::Invalid => {
                 self.view.set(Target::Invalid);
-                self.error.set(Some("This project link is invalid. Open Projects to choose a saved project.".into()));
+                self.error.set(Some(
+                    "This project link is invalid. Open Projects to choose a saved project.".into(),
+                ));
                 self.status.set("Load failed".into());
             }
             Target::List | Target::New => {
@@ -191,81 +274,138 @@ impl Session {
         }
     }
 
-    pub fn reload(self) { self.current(); }
+    pub fn reload(self) {
+        self.current();
+    }
 
     pub fn retry(mut self) {
-        if self.error.peek().as_ref().is_some_and(|message| message.contains("changed in another session")) {
-            self.status.set("Copy unsaved text before reloading the latest saved work.".into());
+        let failed = self.failed_navigation.peek().clone();
+        if let Some(navigation) = failed {
+            self.navigate(navigation);
             return;
         }
-        if *self.uncertain.peek() { self.reload(); return; }
+        if self
+            .error
+            .peek()
+            .as_ref()
+            .is_some_and(|message| message.contains("changed in another session"))
+        {
+            self.status
+                .set("Copy unsaved text before reloading the latest saved work.".into());
+            return;
+        }
+        if *self.uncertain.peek() {
+            self.reload();
+            return;
+        }
         self.error.set(None);
         if self.state.peek().is_none() {
-            self.activate(Navigation { target: location_target(), push: false, history_index: None });
+            self.activate(Navigation {
+                target: location_target(),
+                push: false,
+                history_index: None,
+            });
         }
     }
 }
 
 pub fn use_session() -> Session {
     let session = Session {
-        state: use_signal(|| None), dirty: use_signal(|| false),
-        busy: use_signal(|| false), status: use_signal(|| "Loading project…".into()),
-        error: use_signal(|| None), uncertain: use_signal(|| false),
-        loading: use_signal(|| false), generation: use_signal(|| 0),
-        view: use_signal(location_target), pending: use_signal(|| None), flushing: use_signal(|| false),
+        state: use_signal(|| None),
+        dirty: use_signal(|| false),
+        busy: use_signal(|| false),
+        status: use_signal(|| "Loading project…".into()),
+        error: use_signal(|| None),
+        uncertain: use_signal(|| false),
+        loading: use_signal(|| false),
+        generation: use_signal(|| 0),
+        view: use_signal(location_target),
+        pending: use_signal(|| None),
+        flushing: use_signal(|| false),
+        failed_navigation: use_signal(|| None),
     };
     use_hook(move || {
         let mut session = session;
-        if let Some(window) = web_sys::window() && let Ok(history) = window.history() {
-            let index = history.state().ok().and_then(|state| state.as_f64()).unwrap_or(0.0) as i32;
+        if let Some(window) = web_sys::window()
+            && let Ok(history) = window.history()
+        {
+            let index = history
+                .state()
+                .ok()
+                .and_then(|state| state.as_f64())
+                .unwrap_or(0.0) as i32;
             HISTORY_INDEX.with(|cursor| cursor.set(index));
             let _ = history.replace_state_with_url(&JsValue::from_f64(f64::from(index)), "", None);
         }
-        session.activate(Navigation { target: location_target(), push: false, history_index: None });
+        session.activate(Navigation {
+            target: location_target(),
+            push: false,
+            history_index: None,
+        });
         spawn(async move {
             loop {
                 gloo_timers::future::TimeoutFuture::new(700).await;
-                if !*session.dirty.peek() || *session.busy.peek() || session.error.peek().is_some()
-                    || (session.pending.peek().is_some() && !*session.flushing.peek()) { continue; }
-                let Some(sent) = session.state.peek().clone() else { continue; };
+                if !*session.dirty.peek()
+                    || *session.busy.peek()
+                    || session.error.peek().is_some()
+                    || (session.pending.peek().is_some() && !*session.flushing.peek())
+                {
+                    continue;
+                }
+                let Some(sent) = session.state.peek().clone() else {
+                    continue;
+                };
                 let activation = session.activation();
                 session.busy.set(true);
                 session.status.set("Saving…".into());
-                match save(&sent).await {
-                    Ok(saved) if session.activation() == activation && saved.project_id == sent.project_id => {
+                let result = save(&sent).await;
+                if session.activation() != activation {
+                    continue;
+                }
+                match result {
+                    Ok(saved) if saved.project_id == sent.project_id => {
                         let mut clean = false;
                         if let Some(current) = session.state.write().as_mut()
                             && current.project_id == sent.project_id
                         {
                             current.revision = saved.revision;
-                            clean = current.workspace == sent.workspace && current.description == sent.description;
+                            clean = current.workspace == sent.workspace
+                                && current.description == sent.description;
                         }
                         session.dirty.set(!clean);
-                        session.status.set(if clean { "Saved" } else { "Unsaved changes" }.into());
+                        session
+                            .status
+                            .set(if clean { "Saved" } else { "Unsaved changes" }.into());
                         session.busy.set(false);
                         if clean && *session.flushing.peek() {
                             let pending = session.pending.peek().clone();
-                            if let Some(navigation) = pending { session.activate(navigation); }
+                            if let Some(navigation) = pending {
+                                session.activate(navigation);
+                            }
                         }
                     }
                     Ok(_) => {
-                        session.error.set(Some("The server returned a different project. Reload saved work.".into()));
+                        session.error.set(Some(
+                            "The server returned a different project. Reload saved work.".into(),
+                        ));
                         session.status.set("Saving failed".into());
                         session.busy.set(false);
                     }
-                    Err(message) if session.activation() == activation => {
+                    Err(message) => {
                         session.error.set(Some(message));
                         session.status.set("Saving failed".into());
                         session.flushing.set(false);
                         session.busy.set(false);
                     }
-                    Err(_) => {}
                 }
             }
         });
     });
     let events = use_hook(move || Rc::new(BrowserEvents::new(session)));
-    use_effect(move || events.set_unsaved(*session.dirty.read() || *session.busy.read() || *session.uncertain.read()));
+    use_effect(move || {
+        events
+            .set_unsaved(*session.dirty.read() || *session.busy.read() || *session.uncertain.read())
+    });
     session
 }
 
@@ -285,42 +425,73 @@ impl BrowserEvents {
             }
         });
         let pop = Closure::new(move |event: web_sys::Event| {
-            if SUPPRESS_POP.with(|flag| flag.replace(false)) { return; }
+            if SUPPRESS_POP.with(|flag| flag.replace(false)) {
+                return;
+            }
             let current_index = HISTORY_INDEX.with(Cell::get);
-            let event_index = event.dyn_ref::<web_sys::PopStateEvent>()
-                .and_then(|event| event.state().as_f64()).unwrap_or(0.0) as i32;
+            let event_index = event
+                .dyn_ref::<web_sys::PopStateEvent>()
+                .and_then(|event| event.state().as_f64())
+                .unwrap_or(0.0) as i32;
             let restored = RESTORE_NAV.with(|pending| {
-                if event_index == current_index { pending.borrow_mut().take() } else { None }
+                if event_index == current_index {
+                    pending.borrow_mut().take()
+                } else {
+                    None
+                }
             });
             if let Some((target, index)) = restored {
-                session.navigate(Navigation { target, push: false, history_index: Some(index) });
+                session.navigate(Navigation {
+                    target,
+                    push: false,
+                    history_index: Some(index),
+                });
                 return;
             }
             let target = location_target();
             if current_index == event_index {
-                session.navigate(Navigation { target, push: false, history_index: None });
+                session.navigate(Navigation {
+                    target,
+                    push: false,
+                    history_index: None,
+                });
                 return;
             }
             // Restore the cursor, not the destination entry's URL. A confirmed
             // transition traverses again; Stay leaves the entire history intact.
             RESTORE_NAV.with(|pending| *pending.borrow_mut() = Some((target, event_index)));
-            if let Some(window) = web_sys::window() && let Ok(history) = window.history() {
+            if let Some(window) = web_sys::window()
+                && let Ok(history) = window.history()
+            {
                 let _ = history.go_with_delta(current_index - event_index);
             }
         });
         if let Some(window) = web_sys::window() {
-            let _ = window.add_event_listener_with_callback("popstate", pop.as_ref().unchecked_ref());
+            let _ =
+                window.add_event_listener_with_callback("popstate", pop.as_ref().unchecked_ref());
         }
-        Self { unload, pop, registered: Cell::new(false) }
+        Self {
+            unload,
+            pop,
+            registered: Cell::new(false),
+        }
     }
 
     fn set_unsaved(&self, unsaved: bool) {
-        if self.registered.replace(unsaved) == unsaved { return; }
+        if self.registered.replace(unsaved) == unsaved {
+            return;
+        }
         if let Some(window) = web_sys::window() {
             if unsaved {
-                let _ = window.add_event_listener_with_callback("beforeunload", self.unload.as_ref().unchecked_ref());
+                let _ = window.add_event_listener_with_callback(
+                    "beforeunload",
+                    self.unload.as_ref().unchecked_ref(),
+                );
             } else {
-                let _ = window.remove_event_listener_with_callback("beforeunload", self.unload.as_ref().unchecked_ref());
+                let _ = window.remove_event_listener_with_callback(
+                    "beforeunload",
+                    self.unload.as_ref().unchecked_ref(),
+                );
             }
         }
     }
@@ -329,8 +500,12 @@ impl BrowserEvents {
 impl Drop for BrowserEvents {
     fn drop(&mut self) {
         if let Some(window) = web_sys::window() {
-            let _ = window.remove_event_listener_with_callback("beforeunload", self.unload.as_ref().unchecked_ref());
-            let _ = window.remove_event_listener_with_callback("popstate", self.pop.as_ref().unchecked_ref());
+            let _ = window.remove_event_listener_with_callback(
+                "beforeunload",
+                self.unload.as_ref().unchecked_ref(),
+            );
+            let _ = window
+                .remove_event_listener_with_callback("popstate", self.pop.as_ref().unchecked_ref());
         }
     }
 }
@@ -338,7 +513,13 @@ impl Drop for BrowserEvents {
 #[component]
 pub fn ProjectList(session: Session) -> Element {
     let projects = use_resource(move || async move {
-        decode::<Vec<ProjectSummary>>(Request::get("/api/projects").send().await.map_err(|_| "Could not load projects.".to_string())?).await
+        decode::<Vec<ProjectSummary>>(
+            Request::get("/api/projects")
+                .send()
+                .await
+                .map_err(|_| "Could not load projects.".to_string())?,
+        )
+        .await
     });
     let mut projects = projects;
     rsx! {
@@ -424,7 +605,9 @@ pub fn NewProject(mut session: Session) -> Element {
 
 #[component]
 pub fn UnsavedDialog(mut session: Session) -> Element {
-    if session.pending.read().is_none() { return rsx! {}; }
+    if session.pending.read().is_none() {
+        return rsx! {};
+    }
     rsx! {
         div { class: "dialog-backdrop",
             dialog { id: "unsaved-dialog", class: "unsaved-dialog", role: "dialog", "aria-modal": "true", "aria-label": "Unsaved changes", tabindex: "-1",

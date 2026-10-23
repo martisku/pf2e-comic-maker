@@ -1,10 +1,10 @@
 mod projects;
 
 use comic_model::{Layout, MAX_IMAGE_BYTES, Panel, ProjectSnapshot};
-use projects::Target;
 use dioxus::html::FileData;
 use dioxus::prelude::*;
 use gloo_net::http::Request;
+use projects::Target;
 
 const ARCHIVE_ART: &str = "/archive-forest.png";
 
@@ -366,14 +366,16 @@ async fn upload_image(
     let upload_id = uuid::Uuid::new_v4().to_string();
     let mut last_failure = String::from("No server response");
     for attempt in 0..3 {
-        let response = Request::post(&format!("/api/projects/{project_id}/panels/{panel_id}/images"))
-            .header("content-type", "application/octet-stream")
-            .header("x-comic-revision", &revision.to_string())
-            .header("x-comic-upload-id", &upload_id)
-            .body(bytes.to_vec())
-            .map_err(|e| e.to_string())?
-            .send()
-            .await;
+        let response = Request::post(&format!(
+            "/api/projects/{project_id}/panels/{panel_id}/images"
+        ))
+        .header("content-type", "application/octet-stream")
+        .header("x-comic-revision", &revision.to_string())
+        .header("x-comic-upload-id", &upload_id)
+        .body(bytes.to_vec())
+        .map_err(|e| e.to_string())?
+        .send()
+        .await;
         last_failure = match response {
             Ok(response) if response.ok() => {
                 if let Ok(snapshot) = response.json().await {

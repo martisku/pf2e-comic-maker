@@ -13,7 +13,9 @@ use axum::{
     response::Response,
     routing::{get, post},
 };
-use comic_model::{MAX_IMAGE_BYTES, ProjectCreate, ProjectSnapshot, ProjectSummary, SaveRequest, Snapshot};
+use comic_model::{
+    MAX_IMAGE_BYTES, ProjectCreate, ProjectSnapshot, ProjectSummary, SaveRequest, Snapshot,
+};
 use error::{ApiError, invalid};
 use std::{path::PathBuf, sync::Arc};
 use storage::ImageStore;
@@ -32,8 +34,14 @@ pub fn router(state: AppState, access: auth::Access, public: PathBuf) -> Router 
     let protected = Router::new()
         .route("/api/workspace", get(load).put(save))
         .route("/api/projects", get(list_projects).post(create_project))
-        .route("/api/projects/{project}", get(load_project).put(save_project))
-        .route("/api/projects/{project}/panels/{panel}/images", post(upload_project))
+        .route(
+            "/api/projects/{project}",
+            get(load_project).put(save_project),
+        )
+        .route(
+            "/api/projects/{project}/panels/{panel}/images",
+            post(upload_project),
+        )
         .route("/api/panels/{id}/images", post(upload))
         .route("/images/{name}", get(image))
         .layer(DefaultBodyLimit::max(MAX_IMAGE_BYTES + 64 * 1024))
@@ -64,20 +72,32 @@ async fn save(
     Ok(Json(db::save(&state.db, request).await?))
 }
 
-async fn list_projects(State(state): State<AppState>) -> Result<Json<Vec<ProjectSummary>>, ApiError> {
+async fn list_projects(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<ProjectSummary>>, ApiError> {
     Ok(Json(db::list_projects(&state.db).await?))
 }
-async fn create_project(State(state): State<AppState>, Json(request): Json<ProjectCreate>) -> Result<Json<ProjectSnapshot>, ApiError> {
+async fn create_project(
+    State(state): State<AppState>,
+    Json(request): Json<ProjectCreate>,
+) -> Result<Json<ProjectSnapshot>, ApiError> {
     Ok(Json(db::create_project(&state.db, request).await?))
 }
 fn project_uuid(project: &str) -> Result<Uuid, ApiError> {
     Uuid::parse_str(project).map_err(|_| invalid("Invalid project UUID."))
 }
-async fn load_project(State(state): State<AppState>, Path(project): Path<String>) -> Result<Json<ProjectSnapshot>, ApiError> {
+async fn load_project(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+) -> Result<Json<ProjectSnapshot>, ApiError> {
     let project = project_uuid(&project)?;
     Ok(Json(db::read_project(&state.db, project).await?))
 }
-async fn save_project(State(state): State<AppState>, Path(project): Path<String>, Json(request): Json<ProjectSnapshot>) -> Result<Json<ProjectSnapshot>, ApiError> {
+async fn save_project(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+    Json(request): Json<ProjectSnapshot>,
+) -> Result<Json<ProjectSnapshot>, ApiError> {
     let project = project_uuid(&project)?;
     Ok(Json(db::save_project(&state.db, project, request).await?))
 }
@@ -114,19 +134,31 @@ async fn upload(
     headers: HeaderMap,
     bytes: Bytes,
 ) -> Result<Json<Snapshot>, ApiError> {
-    Ok(Json(upload_for_project(&state, db::original_project(), panel, headers, bytes).await?.legacy()))
+    Ok(Json(
+        upload_for_project(&state, db::original_project(), panel, headers, bytes)
+            .await?
+            .legacy(),
+    ))
 }
 
 async fn upload_project(
-    State(state): State<AppState>, Path((project, panel)): Path<(String, u32)>,
-    headers: HeaderMap, bytes: Bytes,
+    State(state): State<AppState>,
+    Path((project, panel)): Path<(String, u32)>,
+    headers: HeaderMap,
+    bytes: Bytes,
 ) -> Result<Json<ProjectSnapshot>, ApiError> {
     let project = project_uuid(&project)?;
-    Ok(Json(upload_for_project(&state, project, panel, headers, bytes).await?))
+    Ok(Json(
+        upload_for_project(&state, project, panel, headers, bytes).await?,
+    ))
 }
 
 async fn upload_for_project(
-    state: &AppState, project: Uuid, panel: u32, headers: HeaderMap, bytes: Bytes,
+    state: &AppState,
+    project: Uuid,
+    panel: u32,
+    headers: HeaderMap,
+    bytes: Bytes,
 ) -> Result<ProjectSnapshot, ApiError> {
     let revision = headers
         .get("x-comic-revision")
@@ -158,19 +190,25 @@ pub async fn persist_upload(
     intent: &db::Intent,
     bytes: Bytes,
 ) -> Result<Snapshot, ApiError> {
-    if intent.project_id != db::original_project() { return Err(invalid("Legacy upload must target the original project.")); }
+    if intent.project_id != db::original_project() {
+        return Err(invalid("Legacy upload must target the original project."));
+    }
     Ok(persist_project_upload(state, intent, bytes).await?.legacy())
 }
 
 pub async fn persist_project_upload(
-    state: &AppState, intent: &db::Intent, bytes: Bytes,
+    state: &AppState,
+    intent: &db::Intent,
+    bytes: Bytes,
 ) -> Result<ProjectSnapshot, ApiError> {
     if db::reserve(&state.db, intent).await.inspect_err(|error| {
         log_upload_failure(intent.id, "reserve", error);
     })? {
-        return db::replay_project(&state.db, intent.project_id, intent.id).await.inspect_err(|error| {
-            log_upload_failure(intent.id, "replay", error);
-        });
+        return db::replay_project(&state.db, intent.project_id, intent.id)
+            .await
+            .inspect_err(|error| {
+                log_upload_failure(intent.id, "replay", error);
+            });
     }
     let written = state
         .images
@@ -197,7 +235,9 @@ pub async fn persist_project_upload(
         Err(error) => {
             log_upload_failure(intent.id, "finalize", &error);
             match db::abandon(&state.db, intent.id).await {
-                Ok(db::Abandon::Ready) => db::replay_project(&state.db, intent.project_id, intent.id).await,
+                Ok(db::Abandon::Ready) => {
+                    db::replay_project(&state.db, intent.project_id, intent.id).await
+                }
                 Ok(db::Abandon::Key(key)) => {
                     let _ = state.images.delete(&key).await;
                     Err(error)
