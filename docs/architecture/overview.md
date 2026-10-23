@@ -1,5 +1,14 @@
 # Current architecture
 
+F01 implementation now adds project UUIDs, names/descriptions, project-scoped
+revisions and upload intents, plus browser project selection and navigation
+guards. Migration `0002_project_workspaces.sql` expands the singleton table in
+place; legacy API routes continue targeting the original project. Each project
+still has the existing one-page/four-panel model. These changes are written but
+have not yet passed compilation or runtime verification in this environment.
+See [the F01 plan](../plans/project-workspace.md) and
+[project aggregate decision](../decisions/0002-project-workspace-aggregates.md).
+
 The server now implements the selected PostgreSQL/private object-storage
 architecture for the existing prototype. Live Neon account validation and a
 live deployment remain pending. Render Free is selected and the accounts are
@@ -39,8 +48,8 @@ The browser is not the durable storage authority. Multiple devices share data
 when pointed at the same server. Updates carry the revision they were based on;
 conflicting updates fail without silently replacing newer work.
 
-The prototype uses one JSONB workspace record in PostgreSQL and a durable
-upload catalog. Database row locks enforce revision checks across server
+The new F01 implementation uses one revisioned JSONB workspace record per
+project in PostgreSQL and a project-scoped durable upload catalog. Database row locks enforce revision checks across server
 instances. The catalog coordinates idempotent uploads and orphan cleanup. Production feature
 plans must define the relational schema, migrations, project boundaries,
 backup/restore, thumbnail strategy, and recovery behavior. A database/file store

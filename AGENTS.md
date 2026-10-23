@@ -35,6 +35,14 @@ Do not implement a draft plan unless explicitly instructed.
 
 Approved plans should be implemented according to their documented requirements and acceptance criteria.
 
+## Commits and GitHub
+
+- Work on a dedicated feature branch and commit and push progress regularly.
+- Push the first meaningful checkpoint early so the work is visible on GitHub.
+- Mark incomplete or unverified work explicitly in commit messages and documentation.
+- Do not wait for all verification to pass before pushing a work-in-progress branch.
+- Keep verification status accurate; pushing progress does not mean it is ready to merge.
+
 ## General rules
 
 - Prefer simple, maintainable solutions.

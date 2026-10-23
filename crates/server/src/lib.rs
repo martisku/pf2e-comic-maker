@@ -13,7 +13,7 @@ use axum::{
     response::Response,
     routing::{get, post},
 };
-use comic_model::{MAX_IMAGE_BYTES, SaveRequest, Snapshot};
+use comic_model::{MAX_IMAGE_BYTES, ProjectCreate, ProjectSnapshot, ProjectSummary, SaveRequest, Snapshot};
 use error::{ApiError, invalid};
 use std::{path::PathBuf, sync::Arc};
 use storage::ImageStore;
@@ -31,6 +31,9 @@ static IMAGE_DECODERS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_ne
 pub fn router(state: AppState, access: auth::Access, public: PathBuf) -> Router {
     let protected = Router::new()
         .route("/api/workspace", get(load).put(save))
+        .route("/api/projects", get(list_projects).post(create_project))
+        .route("/api/projects/{project}", get(load_project).put(save_project))
+        .route("/api/projects/{project}/panels/{panel}/images", post(upload_project))
         .route("/api/panels/{id}/images", post(upload))
         .route("/images/{name}", get(image))
         .layer(DefaultBodyLimit::max(MAX_IMAGE_BYTES + 64 * 1024))
@@ -59,6 +62,24 @@ async fn save(
     Json(request): Json<SaveRequest>,
 ) -> Result<Json<Snapshot>, ApiError> {
     Ok(Json(db::save(&state.db, request).await?))
+}
+
+async fn list_projects(State(state): State<AppState>) -> Result<Json<Vec<ProjectSummary>>, ApiError> {
+    Ok(Json(db::list_projects(&state.db).await?))
+}
+async fn create_project(State(state): State<AppState>, Json(request): Json<ProjectCreate>) -> Result<Json<ProjectSnapshot>, ApiError> {
+    Ok(Json(db::create_project(&state.db, request).await?))
+}
+fn project_uuid(project: &str) -> Result<Uuid, ApiError> {
+    Uuid::parse_str(project).map_err(|_| invalid("Invalid project UUID."))
+}
+async fn load_project(State(state): State<AppState>, Path(project): Path<String>) -> Result<Json<ProjectSnapshot>, ApiError> {
+    let project = project_uuid(&project)?;
+    Ok(Json(db::read_project(&state.db, project).await?))
+}
+async fn save_project(State(state): State<AppState>, Path(project): Path<String>, Json(request): Json<ProjectSnapshot>) -> Result<Json<ProjectSnapshot>, ApiError> {
+    let project = project_uuid(&project)?;
+    Ok(Json(db::save_project(&state.db, project, request).await?))
 }
 
 pub fn validate_image(bytes: &[u8]) -> Result<&'static str, ApiError> {
@@ -93,6 +114,20 @@ async fn upload(
     headers: HeaderMap,
     bytes: Bytes,
 ) -> Result<Json<Snapshot>, ApiError> {
+    Ok(Json(upload_for_project(&state, db::original_project(), panel, headers, bytes).await?.legacy()))
+}
+
+async fn upload_project(
+    State(state): State<AppState>, Path((project, panel)): Path<(String, u32)>,
+    headers: HeaderMap, bytes: Bytes,
+) -> Result<Json<ProjectSnapshot>, ApiError> {
+    let project = project_uuid(&project)?;
+    Ok(Json(upload_for_project(&state, project, panel, headers, bytes).await?))
+}
+
+async fn upload_for_project(
+    state: &AppState, project: Uuid, panel: u32, headers: HeaderMap, bytes: Bytes,
+) -> Result<ProjectSnapshot, ApiError> {
     let revision = headers
         .get("x-comic-revision")
         .and_then(|h| h.to_str().ok())
@@ -113,8 +148,9 @@ async fn upload(
     })
     .await
     .map_err(|_| error::unavailable())??;
-    let intent = db::Intent::new(id, panel, revision, &bytes, mime)?;
-    Ok(Json(persist_upload(&state, &intent, bytes).await?))
+    let mut intent = db::Intent::new(id, panel, revision, &bytes, mime)?;
+    intent.project_id = project;
+    persist_project_upload(state, &intent, bytes).await
 }
 
 pub async fn persist_upload(
@@ -122,10 +158,17 @@ pub async fn persist_upload(
     intent: &db::Intent,
     bytes: Bytes,
 ) -> Result<Snapshot, ApiError> {
+    if intent.project_id != db::original_project() { return Err(invalid("Legacy upload must target the original project.")); }
+    Ok(persist_project_upload(state, intent, bytes).await?.legacy())
+}
+
+pub async fn persist_project_upload(
+    state: &AppState, intent: &db::Intent, bytes: Bytes,
+) -> Result<ProjectSnapshot, ApiError> {
     if db::reserve(&state.db, intent).await.inspect_err(|error| {
         log_upload_failure(intent.id, "reserve", error);
     })? {
-        return db::replay(&state.db, intent.id).await.inspect_err(|error| {
+        return db::replay_project(&state.db, intent.project_id, intent.id).await.inspect_err(|error| {
             log_upload_failure(intent.id, "replay", error);
         });
     }
@@ -149,12 +192,12 @@ pub async fn persist_upload(
         log_upload_failure(intent.id, "object_put_or_verification", &error);
         return Err(error);
     }
-    match db::finish(&state.db, intent.id).await {
+    match db::finish_project(&state.db, intent.project_id, intent.id).await {
         Ok(snapshot) => Ok(snapshot),
         Err(error) => {
             log_upload_failure(intent.id, "finalize", &error);
             match db::abandon(&state.db, intent.id).await {
-                Ok(db::Abandon::Ready) => db::replay(&state.db, intent.id).await,
+                Ok(db::Abandon::Ready) => db::replay_project(&state.db, intent.project_id, intent.id).await,
                 Ok(db::Abandon::Key(key)) => {
                     let _ = state.images.delete(&key).await;
                     Err(error)

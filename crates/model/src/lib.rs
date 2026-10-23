@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const MAX_IMAGE_BYTES: usize = 20_000_000;
+pub const ORIGINAL_PROJECT_ID: &str = "00000000-0000-4000-8000-000000000001";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PanelImage {
@@ -92,6 +93,14 @@ impl Default for Workspace {
 }
 
 impl Workspace {
+    pub fn blank(title: String) -> Self {
+        let mut workspace = Self { title, ..Self::default() };
+        for panel in &mut workspace.panels {
+            panel.action.clear();
+        }
+        workspace
+    }
+
     pub fn change_layout(&mut self, layout: Layout) {
         self.layout = layout;
         self.slots.resize(layout.capacity(), None);
@@ -162,9 +171,63 @@ pub struct SaveRequest {
     pub workspace: Workspace,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectSnapshot {
+    pub project_id: String,
+    pub description: String,
+    pub revision: u64,
+    pub workspace: Workspace,
+}
+
+impl ProjectSnapshot {
+    pub fn legacy(self) -> Snapshot {
+        Snapshot { revision: self.revision, workspace: self.workspace }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectCreate {
+    pub project_id: String,
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectSummary {
+    pub project_id: String,
+    pub name: String,
+}
+
+pub fn validate_project_metadata(name: &str, description: &str) -> Result<(), &'static str> {
+    if name.trim().is_empty() || name.len() > 500 {
+        return Err("Project name must contain text and be no longer than 500 bytes.");
+    }
+    if description.len() > 20_000 {
+        return Err("Project description must be no longer than 20,000 bytes.");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blank_project_has_no_sample_story_or_images() {
+        let workspace = Workspace::blank("My project".into());
+        assert_eq!(workspace.title, "My project");
+        assert!(workspace.panels.iter().all(|panel| panel.action.is_empty()
+            && panel.dialogue.is_empty() && panel.images.is_empty()));
+        workspace.validate().unwrap();
+    }
+
+    #[test]
+    fn metadata_requires_a_name_and_enforces_utf8_byte_limits() {
+        assert!(validate_project_metadata("  \n", "").is_err());
+        assert!(validate_project_metadata(&"é".repeat(250), &"é".repeat(10_000)).is_ok());
+        assert!(validate_project_metadata(&"é".repeat(251), "").is_err());
+        assert!(validate_project_metadata("Project", &"é".repeat(10_001)).is_err());
+    }
 
     #[test]
     fn smaller_layout_preserves_panels_and_their_images() {

@@ -486,3 +486,164 @@ async fn durable_api_failure_recovery() {
     );
     probe_server.abort();
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured disposable PostgreSQL and S3 services"]
+async fn projects_keep_edits_and_uploads_independent() {
+    use comic_model::{ProjectCreate, ProjectSnapshot, ProjectSummary};
+    let (state, _) = fixture().await;
+    let original = db::read(&state.db).await.unwrap();
+    let a = Uuid::new_v4();
+    let b = Uuid::new_v4();
+    let create = |id: Uuid, name: &str| ProjectCreate {
+        project_id: id.to_string(), name: name.into(), description: format!("{name} description"),
+    };
+    let request_a = create(a, "Alpha");
+    let mut alpha = db::create_project(&state.db, request_a.clone()).await.unwrap();
+    let mut beta = db::create_project(&state.db, create(b, "Beta")).await.unwrap();
+    assert!(alpha.workspace.panels.iter().all(|panel| panel.action.is_empty() && panel.images.is_empty()));
+    alpha.workspace.panels[0].action = "Alpha only".into();
+    alpha.description = "Edited description".into();
+    beta.workspace.panels[0].action = "Beta only".into();
+    let (saved_a, saved_b) = tokio::join!(
+        db::save_project(&state.db, a, alpha.clone()),
+        db::save_project(&state.db, b, beta.clone()),
+    );
+    alpha = saved_a.unwrap();
+    beta = saved_b.unwrap();
+    assert_eq!(alpha.revision, beta.revision);
+    assert_eq!(db::create_project(&state.db, request_a.clone()).await.unwrap(), alpha);
+    let mut wrong_creation = request_a;
+    wrong_creation.description = "Different request".into();
+    assert_eq!(db::create_project(&state.db, wrong_creation).await.unwrap_err().0, 409);
+    let mut stale = alpha.clone();
+    stale.revision -= 1;
+    assert_eq!(db::save_project(&state.db, a, stale).await.unwrap_err().0, 409);
+    assert_eq!(db::save_project(&state.db, b, alpha.clone()).await.unwrap_err().0, 400);
+    let mut invalid = alpha.clone();
+    invalid.workspace.title = "  \n".into();
+    assert_eq!(db::save_project(&state.db, a, invalid).await.unwrap_err().0, 400);
+    assert_eq!(db::read(&state.db).await.unwrap(), original);
+
+    let bytes = picture(image::ImageFormat::Png);
+    let id = Uuid::new_v4();
+    let mut intent = db::Intent::new(id, 1, alpha.revision, &bytes, "image/png").unwrap();
+    intent.project_id = a;
+    let uploaded = comic_server::persist_project_upload(&state, &intent, bytes.clone()).await.unwrap();
+    assert_eq!(db::read_project(&state.db, b).await.unwrap(), beta);
+    let mut wrong_project = intent.clone();
+    wrong_project.project_id = b;
+    assert_eq!(comic_server::persist_project_upload(&state, &wrong_project, bytes).await.unwrap_err().0, 409);
+    assert_eq!(db::replay_project(&state.db, b, id).await.unwrap_err().0, 409);
+    assert_eq!(db::finish_project(&state.db, b, id).await.unwrap_err().0, 409);
+    let mut forged = beta.clone();
+    forged.workspace.panels[0].images = uploaded.workspace.panels[0].images.clone();
+    forged.workspace.panels[0].selected_image = uploaded.workspace.panels[0].selected_image.clone();
+    assert_eq!(db::save_project(&state.db, b, forged).await.unwrap_err().0, 400);
+
+    // Different project locks must not permit a simultaneous UUID collision
+    // to become two upload intents or leak a database uniqueness error.
+    let collision = Uuid::new_v4();
+    let bytes = picture(image::ImageFormat::Png);
+    let mut collision_a = db::Intent::new(collision, 3, uploaded.revision, &bytes, "image/png").unwrap();
+    collision_a.project_id = a;
+    let mut collision_b = db::Intent::new(collision, 3, beta.revision, &bytes, "image/png").unwrap();
+    collision_b.project_id = b;
+    let (reserved_a, reserved_b) = tokio::join!(
+        db::reserve(&state.db, &collision_a), db::reserve(&state.db, &collision_b),
+    );
+    match (reserved_a, reserved_b) {
+        (Ok(false), Err(error)) | (Err(error), Ok(false)) => assert_eq!(error.0, 409),
+        result => panic!("Expected one reservation and one conflict: {result:?}"),
+    }
+
+    // Exercise project HTTP DTOs, authentication, Origin, errors and image route.
+    let (origin, task) = serve(state.clone()).await;
+    let client = reqwest::Client::new();
+    let url = format!("{origin}/api/projects");
+    assert_eq!(client.get(&url).send().await.unwrap().status(), 401);
+    let list: Vec<ProjectSummary> = client.get(&url).basic_auth("comic", Some(PASSWORD))
+        .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    assert_eq!(list.len(), 3);
+    let loaded: ProjectSnapshot = client.get(format!("{url}/{a}"))
+        .basic_auth("comic", Some(PASSWORD)).send().await.unwrap()
+        .error_for_status().unwrap().json().await.unwrap();
+    assert_eq!(loaded, uploaded);
+    assert_eq!(client.get(format!("{url}/{}", Uuid::new_v4())).basic_auth("comic", Some(PASSWORD))
+        .send().await.unwrap().status(), 404);
+    assert_eq!(client.put(format!("{url}/{a}")).basic_auth("comic", Some(PASSWORD))
+        .json(&loaded).send().await.unwrap().status(), 403);
+    let mut renamed = loaded;
+    renamed.workspace.title = "Renamed Alpha".into();
+    let renamed: ProjectSnapshot = client.put(format!("{url}/{a}"))
+        .basic_auth("comic", Some(PASSWORD)).header("origin", &origin).json(&renamed)
+        .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    let bytes = picture(image::ImageFormat::Jpeg);
+    let uploaded_http: ProjectSnapshot = client.post(format!("{url}/{a}/panels/2/images"))
+        .basic_auth("comic", Some(PASSWORD)).header("origin", &origin)
+        .header("x-comic-revision", renamed.revision.to_string()).header("x-comic-upload-id", Uuid::new_v4().to_string())
+        .body(bytes).send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    assert_eq!(uploaded_http.project_id, a.to_string());
+    assert_eq!(uploaded_http.workspace.panels[1].images.len(), 1);
+    let create_http = create(Uuid::new_v4(), "HTTP project");
+    let created: ProjectSnapshot = client.post(&url).basic_auth("comic", Some(PASSWORD))
+        .header("origin", &origin).json(&create_http).send().await.unwrap()
+        .error_for_status().unwrap().json().await.unwrap();
+    assert_eq!(created.project_id, create_http.project_id);
+    db::migrate(&state.db).await.unwrap();
+    assert_eq!(db::read_project(&state.db, b).await.unwrap(), beta);
+    task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured disposable PostgreSQL and S3 services"]
+async fn populated_singleton_expands_without_changing_legacy_content() {
+    let (state, _) = fixture().await;
+    // This pool is isolated in a unique disposable schema. Recreate the exact
+    // historical 0001 tables to test the additive migration with populated data.
+    sqlx::raw_sql("DROP TABLE image_uploads; DROP TABLE workspace CASCADE; DROP TABLE _sqlx_migrations;")
+        .execute(&state.db).await.unwrap();
+    sqlx::raw_sql(include_str!("../migrations/0001_durable_storage.sql"))
+        .execute(&state.db).await.unwrap();
+    let image_id = Uuid::new_v4();
+    let mut workspace = Workspace::default();
+    workspace.panels[0].images.push(PanelImage { id: image_id.to_string(), url: format!("/images/{image_id}.png") });
+    workspace.panels[0].selected_image = Some(image_id.to_string());
+    workspace.panels[0].crop_x = 17;
+    sqlx::query("INSERT INTO workspace VALUES (1,9,$1)").bind(sqlx::types::Json(&workspace))
+        .execute(&state.db).await.unwrap();
+    sqlx::query("INSERT INTO image_uploads (id,panel_id,expected_revision,digest,content_type,byte_size,object_key,state) VALUES ($1,1,8,'digest','image/png',42,$2,'ready')")
+        .bind(image_id).bind(format!("images/{image_id}")).execute(&state.db).await.unwrap();
+    sqlx::raw_sql(include_str!("../migrations/0002_project_workspaces.sql"))
+        .execute(&state.db).await.unwrap();
+    let old = db::read(&state.db).await.unwrap();
+    assert_eq!(old.revision, 9);
+    assert_eq!(old.workspace, workspace);
+    let mut project = db::read_project(&state.db, db::original_project()).await.unwrap();
+    project.description = "Description must survive old-server saves".into();
+    project = db::save_project(&state.db, db::original_project(), project).await.unwrap();
+    let another = db::create_project(&state.db, comic_model::ProjectCreate {
+        project_id: Uuid::new_v4().to_string(), name: "Other".into(), description: String::new(),
+    }).await.unwrap();
+    // Old binaries run this exact shape; no description field or project UUID.
+    sqlx::query("UPDATE workspace SET revision = revision + 1, data = $1 WHERE id = 1 AND revision = $2")
+        .bind(sqlx::types::Json(&workspace)).bind(project.revision as i64)
+        .execute(&state.db).await.unwrap();
+    assert_eq!(db::read_project(&state.db, db::original_project()).await.unwrap().description, project.description);
+    let legacy_saved = db::save(&state.db, SaveRequest {
+        revision: project.revision + 1, workspace: workspace.clone(),
+    }).await.unwrap();
+    assert_eq!(legacy_saved.workspace, workspace);
+    assert_eq!(db::read_project(&state.db, db::original_project()).await.unwrap().description, project.description);
+    assert_eq!(db::read_project(&state.db, Uuid::parse_str(&another.project_id).unwrap()).await.unwrap(), another);
+    // Old upload INSERTs receive only the original project via the default.
+    let pending_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO image_uploads (id,panel_id,expected_revision,digest,content_type,byte_size,object_key,state) VALUES ($1,2,$2,'digest','image/png',42,$3,'pending')")
+        .bind(pending_id).bind(legacy_saved.revision as i64).bind(format!("images/{pending_id}"))
+        .execute(&state.db).await.unwrap();
+    let existing = db::image(&state.db, image_id).await.unwrap();
+    assert_eq!(existing.project_id, db::original_project());
+    assert_eq!(existing.object_key, format!("images/{image_id}"));
+    let next = db::finish(&state.db, pending_id).await.unwrap();
+    assert_eq!(next.workspace.panels[1].images.len(), 1);
+}

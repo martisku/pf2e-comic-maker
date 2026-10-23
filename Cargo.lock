@@ -369,6 +369,8 @@ dependencies = [
  "gloo-timers",
  "serde",
  "uuid",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

@@ -312,6 +312,14 @@ Significant technical decisions should be recorded under:
 
 ## Project status
 
-Early design and project setup.
+The illustrated workspace design and prototype storage/deployment code are in
+place. The first milestone is partially implemented: the current workspace has
+four fixed panels, image alternatives and one composition page. The F01
+project-management increment is written and awaiting compilation/runtime
+verification; chapter management, reusable assets, visual references and
+backup/restore remain.
 
-The current priority is to define the product model and establish the development workflow before building significant application functionality.
+See the [feature status and recommended delivery order](docs/feature-status.md)
+for all 19 features, requirement and implementation-plan status, remaining work,
+and verification evidence. Next: verify the approved
+[F01 project-management increment](docs/plans/project-workspace.md).

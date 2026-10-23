@@ -6,6 +6,10 @@ The user approved the feature inventory and first milestone on 2026-10-11.
 The first milestone's detailed requirements have also been reviewed and approved.
 Implementation plans and implementation remain separate steps.
 
+For current delivery status, implemented behavior, remaining work and recommended
+delivery order, see the [feature status overview](../feature-status.md).
+This feature map records approved scope rather than implementation completion.
+
 ## Purpose and source
 
 Record the initial product features and the selected first implementation milestone.
