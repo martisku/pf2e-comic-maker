@@ -137,4 +137,8 @@ Before considering a feature complete:
 - build the application,
 - inspect the final diff.
 
-The exact commands should be documented in the project README or architecture documentation once the technology stack is established.
+Use the verification paths in [the agent and Codex quickstart](agent-quickstart.md).
+The Dockerfile and GitHub Actions workflow define the complete automated checks.
+Choose checks appropriate to the change and record the tested commit and results.
+For documentation-only edits, validate links, paths and consistency; application
+tests need not be repeated solely for prose.
