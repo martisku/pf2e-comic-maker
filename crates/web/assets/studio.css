@@ -191,3 +191,17 @@ footer { display: flex; justify-content: space-between; gap: 15px; border-top: 1
   footer { flex-wrap: wrap; font-size: 8px; }
 }
 @media(prefers-reduced-motion:reduce) { * { transition: none !important; } }
+
+.workspace-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.workspace-fields:disabled { opacity: .7; }
+.project-description { display: block; max-width: 36rem; margin: 1rem 0; }
+.project-browser { max-width: 58rem; padding: 2rem; margin: 0 auto; }
+.project-browser form { max-width: 36rem; display: grid; gap: 1rem; }
+.project-browser label { display: grid; gap: .5rem; }
+.project-list { display: grid; gap: .8rem; margin-top: 1.5rem; }
+.project-list-item { display: flex; justify-content: space-between; gap: 1rem; padding: 1.2rem; text-align: left; }
+.project-list-item strong { overflow-wrap: anywhere; }
+.dialog-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: #050e0bdd; padding: 1rem; }
+.unsaved-dialog { max-width: 36rem; background: var(--panel, #172820); color: var(--text, #f0e6cf); border: 1px solid #a98e50; padding: 1.5rem; border-radius: .6rem; }
+.unsaved-dialog button { margin: .4rem .5rem .4rem 0; }
+@media (max-width: 600px) { .project-browser { padding: 1rem; } .project-list-item { flex-direction: column; } }

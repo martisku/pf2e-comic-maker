@@ -2,6 +2,10 @@
 
 Feature requirements define what the product should do.
 
+See the [feature map](feature-map.md) for approved scope and the
+[feature status overview](../feature-status.md) for planned and implemented
+features, remaining work, plan status and verification evidence.
+
 Store one requirement per file where practical.
 
 Example:

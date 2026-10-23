@@ -1,5 +1,31 @@
 # Dioxus web prototype
 
+## F01 project-management increment — verified in CI, 2026-10-23
+
+The new implementation adds a Projects list, project creation, editable project
+descriptions and independent workspaces with guarded navigation. Projects have
+one composition page and four panels for now. The original workspace remains
+accessible at the initial route; project deep links use `?project=<uuid>` and
+the project list uses `?view=projects`.
+
+Run the existing explicit `comic-server migrate` command to apply migration
+0002 before running the new server. It retains existing data and image URLs.
+Never replace or edit migration 0001 on an existing database. Legacy workspace
+and upload endpoints continue targeting the original project.
+
+New browser verification is in `scripts/project-smoke.cjs`, called by
+`scripts/container-smoke.sh` before and after the runtime restart. It must run
+only against disposable data. [CI verification](https://github.com/martisku/pf2e-comic-maker/actions/runs/39986565839)
+passed Rust formatting, seven unit tests, native/Wasm Clippy, release builds,
+three PostgreSQL/S3 integration tests, desktop/phone browser workflows and
+fresh-container project/image retention. Screenshots are retained in the
+workflow's `browser-verification` artifact. Live deployment and physical-device
+verification remain separate from these disposable-service results.
+
+Navigation warnings protect unsaved edits where supported. Browser-owned close
+warnings require interaction and cannot protect against every mobile process
+termination; automatic saving remains the primary persistence mechanism.
+
 The user explicitly authorized this technical spike. It evaluates the stack in
 [the proposal](../plans/technology-stack.md); it does not implement the whole
 first milestone or mark its acceptance criteria complete.
@@ -54,13 +80,14 @@ NODE_PATH=/tmp/comic-browser-check/node_modules node scripts/browser-smoke.cjs
 
 ## Deliberate prototype limits
 
-There is no project/chapter creation, asset library, reference management,
-backup/restore, integrated generation, or finished export yet. Thumbnails and
+Project creation and switching are implemented and verified in the F01 increment above.
+There is no chapter creation, asset library, reference management, backup/restore,
+integrated generation, or finished export yet. Thumbnails and
 browser navigation warnings are also deferred. Original images are served
 directly, so performance with large image collections remains unverified.
 
-PostgreSQL holds the sample workspace as one JSONB document with a revision
-counter, with image metadata in a separate upload catalog. This validates the round trip, not the relational milestone model.
+PostgreSQL holds each project workspace as a JSONB document with a revision
+counter, with project-scoped image metadata in a separate upload catalog. This validates the round trip, not the relational milestone model.
 Automatic saving runs in a serialized loop approximately every 700 ms. Edits
 made during a save remain pending; image upload is enabled only after pending
 edits are saved. Conflicts stop autosaving and retain local text on screen; copy

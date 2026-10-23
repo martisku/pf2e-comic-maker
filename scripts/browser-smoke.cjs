@@ -22,6 +22,9 @@ fs.mkdirSync(output, { recursive: true });
   });
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));
+  // Dedicated project checks verify cancellation. Here explicit reloads recover
+  // disposable work after upload/save failures, including ambiguous outcomes.
+  page.on('dialog', dialog => dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss());
   const read = async () => {
     const response = await context.request.get(`${baseURL}/api/workspace`);
     assert(response.ok());
@@ -72,7 +75,7 @@ fs.mkdirSync(output, { recursive: true });
     // without reflecting an arbitrary provider/proxy response into the UI.
     const beforeFailedUpload = await read();
     const failedUploadIds = [];
-    await page.route('**/api/panels/*/images', route => {
+    await page.route('**/api/projects/*/panels/*/images', route => {
       failedUploadIds.push(route.request().headers()['x-comic-upload-id']);
       return route.fulfill({ status: 503, body: 'provider-secret-sentinel' });
     });
@@ -86,7 +89,7 @@ fs.mkdirSync(output, { recursive: true });
     assert(uploadFailure.includes(failedUploadIds[0]));
     assert(!uploadFailure.includes('provider-secret-sentinel'));
     assert.deepEqual(await read(), beforeFailedUpload);
-    await page.unroute('**/api/panels/*/images');
+    await page.unroute('**/api/projects/*/panels/*/images');
     await page.reload();
     await saved();
 
@@ -188,11 +191,11 @@ fs.mkdirSync(output, { recursive: true });
     await page.getByRole('navigation', { name: 'Workspace views' }).getByRole('button', { name: 'Page composition', exact: false }).click();
     assert.equal(await editor.getByLabel('Dialogue').inputValue(), 'Who goes there?');
 
-    await page.route('**/api/workspace', route => route.abort());
+    await page.route('**/api/projects/*', route => route.abort());
     await editor.getByLabel('Dialogue').fill('Keep this edit when saving fails.');
     await page.getByRole('alert').waitFor();
     assert.equal(await editor.getByLabel('Dialogue').inputValue(), 'Keep this edit when saving fails.');
-    await page.unroute('**/api/workspace');
+    await page.unroute('**/api/projects/*');
     await page.getByRole('button', { name: 'Retry', exact: true }).click();
     await waitForData(s => s.workspace.panels[0].dialogue === 'Keep this edit when saving fails.');
     await saved();

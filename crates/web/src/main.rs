@@ -1,7 +1,10 @@
-use comic_model::{Layout, MAX_IMAGE_BYTES, Panel, SaveRequest, Snapshot};
+mod projects;
+
+use comic_model::{Layout, MAX_IMAGE_BYTES, Panel, ProjectSnapshot};
 use dioxus::html::FileData;
 use dioxus::prelude::*;
 use gloo_net::http::Request;
+use projects::Target;
 
 const ARCHIVE_ART: &str = "/archive-forest.png";
 
@@ -9,41 +12,8 @@ fn main() {
     dioxus::launch(App);
 }
 
-async fn load_workspace() -> Result<Snapshot, String> {
-    let response = Request::get("/api/workspace")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    if !response.ok() {
-        return Err(response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Load failed.".into()));
-    }
-    response.json().await.map_err(|e| e.to_string())
-}
-
-async fn save_workspace(snapshot: Snapshot) -> Result<Snapshot, String> {
-    let response = Request::put("/api/workspace")
-        .json(&SaveRequest {
-            revision: snapshot.revision,
-            workspace: snapshot.workspace,
-        })
-        .map_err(|e| e.to_string())?
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    if !response.ok() {
-        return Err(response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Save failed.".into()));
-    }
-    response.json().await.map_err(|e| e.to_string())
-}
-
 fn edit_panel(
-    mut state: Signal<Option<Snapshot>>,
+    mut state: Signal<Option<ProjectSnapshot>>,
     mut dirty: Signal<bool>,
     id: u32,
     edit: impl FnOnce(&mut Panel),
@@ -58,59 +28,14 @@ fn edit_panel(
 
 #[component]
 fn App() -> Element {
-    let mut state = use_signal(|| None::<Snapshot>);
-    let mut dirty = use_signal(|| false);
-    let mut busy = use_signal(|| false);
-    let mut status = use_signal(|| "Loading workspace…".to_string());
-    let mut error = use_signal(|| None::<String>);
+    let mut session = projects::use_session();
+    let mut state = session.state;
+    let mut dirty = session.dirty;
+    let mut busy = session.busy;
+    let mut status = session.status;
+    let mut error = session.error;
     let mut selected = use_signal(|| 1u32);
     let mut overview = use_signal(|| false);
-
-    // One serialized save loop: edits made while a request runs remain dirty.
-    use_hook(move || {
-        spawn(async move {
-            match load_workspace().await {
-                Ok(snapshot) => {
-                    state.set(Some(snapshot));
-                    status.set("Saved".into());
-                }
-                Err(message) => {
-                    error.set(Some(message));
-                    status.set("Load failed".into());
-                }
-            }
-            loop {
-                gloo_timers::future::TimeoutFuture::new(700).await;
-                if !*dirty.peek() || *busy.peek() || error.peek().is_some() {
-                    continue;
-                }
-                let Some(sent) = state.peek().clone() else {
-                    continue;
-                };
-                busy.set(true);
-                status.set("Saving…".into());
-                match save_workspace(sent.clone()).await {
-                    Ok(saved) => {
-                        let mut current = state.write();
-                        if let Some(current) = current.as_mut() {
-                            current.revision = saved.revision;
-                            if current.workspace == sent.workspace {
-                                dirty.set(false);
-                                status.set("Saved".into());
-                            } else {
-                                status.set("Unsaved changes".into());
-                            }
-                        }
-                    }
-                    Err(message) => {
-                        error.set(Some(message));
-                        status.set("Saving failed".into());
-                    }
-                }
-                busy.set(false);
-            }
-        })
-    });
 
     let snapshot = state.read().clone();
     let workspace = snapshot.as_ref().map(|s| s.workspace.clone());
@@ -134,10 +59,12 @@ fn App() -> Element {
                 small { "A Pathfinder story in the making" }
             }
             nav { "aria-label": "Workspace views",
-                button { class: if overview() { "archive-nav active" } else { "archive-nav" }, "aria-pressed": overview(), onclick: move |_| overview.set(true),
+                button { class: "archive-nav", disabled: busy(), onclick: move |_| session.request(Target::List), "Projects" }
+
+                button { class: if overview() { "archive-nav active" } else { "archive-nav" }, "aria-pressed": overview(), onclick: move |_| { if session.show_list() || session.show_new() { session.current(); } overview.set(true); },
                     span { "◇" } "Story overview"
                 }
-                button { class: if !overview() { "archive-nav active" } else { "archive-nav" }, "aria-pressed": !overview(), onclick: move |_| overview.set(false),
+                button { class: if !overview() { "archive-nav active" } else { "archive-nav" }, "aria-pressed": !overview(), onclick: move |_| { if session.show_list() || session.show_new() { session.current(); } overview.set(false); },
                     span { "▤" } "Page composition"
                 }
             }
@@ -152,38 +79,35 @@ fn App() -> Element {
                     span { role: "status", class: if error().is_some() { "save-status failed" } else { "save-status" }, "{visible_status}" }
                 }
             }
-            if let Some(message) = error() {
+            if let Some(message) = error().filter(|_| !session.dialog_open()) {
                 div { class: "error", role: "alert",
                     span { "{message}" }
-                    button { disabled: busy(), onclick: move |_| {
-                        error.set(None);
-                        if state.peek().is_none() {
-                            spawn(async move {
-                                match load_workspace().await {
-                                    Ok(snapshot) => { state.set(Some(snapshot)); status.set("Saved".into()); }
-                                    Err(message) => { error.set(Some(message)); status.set("Load failed".into()); }
-                                }
-                            });
-                        } else if !dirty() { status.set("Saved".into()); }
-                    }, "Retry" }
-                    button { disabled: busy(), onclick: move |_| {
-                        if dirty() { status.set("Unsaved edits remain. Copy your text before reloading.".into()); return; }
-                        spawn(async move {
-                            match load_workspace().await {
-                                Ok(snapshot) => { state.set(Some(snapshot)); error.set(None); status.set("Saved".into()); }
-                                Err(message) => error.set(Some(message)),
-                            }
-                        });
-                    }, "Reload saved work" }
+                    button { disabled: busy(), onclick: move |_| session.retry(), "Retry" }
+                    button { disabled: busy(), onclick: move |_| session.reload(), "Reload saved work" }
                 }
             }
-            if let Some(workspace) = workspace {
+            if session.show_list() {
+                projects::ProjectList { session }
+            } else if session.show_new() {
+                projects::NewProject { session }
+            } else if session.invalid() {
+                div { class: "loading", "Choose Projects to open your saved work." }
+            } else if let Some(workspace) = workspace {
+                fieldset { class: "workspace-fields", disabled: session.loading(),
+
                 section { class: "project-heading",
                     div { p { class: "eyebrow", "YOUR ILLUSTRATED STORY" }
                         h1 { if overview() { "Your story, unfolding." } else { "The story takes shape." } }
                         input { class: "project-title", "aria-label": "Project title", value: "{workspace.title}",
                             oninput: move |event| {
                                 if let Some(snapshot) = state.write().as_mut() { snapshot.workspace.title = event.value(); dirty.set(true); }
+                            }
+                        }
+                    }
+                    label { class: "project-description", "Project description"
+                        textarea { "aria-label": "Project description", rows: "2", value: "{snapshot.as_ref().map(|s| s.description.as_str()).unwrap_or_default()}",
+                            oninput: move |event| {
+                                if let Some(snapshot) = state.write().as_mut() { snapshot.description = event.value(); dirty.set(true); }
                             }
                         }
                     }
@@ -336,11 +260,13 @@ fn App() -> Element {
                                                     let files = event.files();
                                                     if files.is_empty() { return; }
                                                     let Some(before) = state.peek().clone() else { return; };
+                                                    let activation = session.activation();
                                                     busy.set(true); status.set("Uploading…".into());
                                                     spawn(async move {
-                                                        let result = upload_image(id, before.revision, files).await;
+                                                        let result = upload_image(&before.project_id, id, before.revision, files).await;
+                                                        if session.activation() != activation { return; }
                                                         match result {
-                                                            Ok(saved) => {
+                                                            Ok(saved) if saved.project_id == before.project_id => {
                                                                 if let Some(current) = state.write().as_mut() {
                                                                     current.revision = saved.revision;
                                                                     for (local, remote) in current.workspace.panels.iter_mut().zip(saved.workspace.panels) {
@@ -350,7 +276,14 @@ fn App() -> Element {
                                                                 }
                                                                 status.set(if dirty() { "Unsaved changes" } else { "Saved" }.into());
                                                             }
-                                                            Err(message) => { error.set(Some(message)); status.set("Upload failed".into()); }
+                                                            Ok(_) => {
+                                                                error.set(Some("The server returned a different project. Reload saved work.".into()));
+                                                                status.set("Upload failed".into());
+                                                            }
+                                                            Err(message) => {
+                                                                session.uncertain.set(message.contains("outcome is unknown"));
+                                                                error.set(Some(message)); status.set("Upload failed".into());
+                                                            }
                                                         }
                                                         busy.set(false);
                                                     });
@@ -407,19 +340,22 @@ fn App() -> Element {
                         }
                     }
                 }
+            }
             } else {
                 div { class: "loading", "{status}" }
             }
+            projects::UnsavedDialog { session }
             footer { span { "PF2E COMIC MAKER · STORY ARCHIVE" } span { "The story is yours. Give it shape. ✧" } }
         }
     }
 }
 
 async fn upload_image(
+    project_id: &str,
     panel_id: u32,
     revision: u64,
     files: Vec<FileData>,
-) -> Result<Snapshot, String> {
+) -> Result<ProjectSnapshot, String> {
     let file = files
         .first()
         .ok_or_else(|| "No image selected.".to_string())?;
@@ -430,14 +366,16 @@ async fn upload_image(
     let upload_id = uuid::Uuid::new_v4().to_string();
     let mut last_failure = String::from("No server response");
     for attempt in 0..3 {
-        let response = Request::post(&format!("/api/panels/{panel_id}/images"))
-            .header("content-type", "application/octet-stream")
-            .header("x-comic-revision", &revision.to_string())
-            .header("x-comic-upload-id", &upload_id)
-            .body(bytes.to_vec())
-            .map_err(|e| e.to_string())?
-            .send()
-            .await;
+        let response = Request::post(&format!(
+            "/api/projects/{project_id}/panels/{panel_id}/images"
+        ))
+        .header("content-type", "application/octet-stream")
+        .header("x-comic-revision", &revision.to_string())
+        .header("x-comic-upload-id", &upload_id)
+        .body(bytes.to_vec())
+        .map_err(|e| e.to_string())?
+        .send()
+        .await;
         last_failure = match response {
             Ok(response) if response.ok() => {
                 if let Ok(snapshot) = response.json().await {

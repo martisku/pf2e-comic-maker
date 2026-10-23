@@ -22,23 +22,41 @@ wait_ready() {
     return 1
 }
 docker run --rm "${runtime_config[@]}" comic-runtime:ci migrate
+smoke_tmp_dir="$(mktemp -d /tmp/comic-container-smoke.XXXXXX)"
+owns_container=false
+cleanup() {
+    local result=$?
+    trap - EXIT
+    if "$owns_container"; then
+        docker logs comic-ci || true
+        docker rm -f comic-ci >/dev/null 2>&1 || true
+    fi
+    rm -rf -- "$smoke_tmp_dir"
+    exit "$result"
+}
+trap cleanup EXIT
+export COMIC_PROJECT_SNAPSHOT="$smoke_tmp_dir/projects-before.json"
 docker run -d --name comic-ci "${runtime_config[@]}" comic-runtime:ci
-trap 'docker logs comic-ci; docker rm -f comic-ci >/dev/null' EXIT
+owns_container=true
 wait_ready
 node scripts/browser-smoke.cjs
+node scripts/project-smoke.cjs
 curl --silent --show-error --fail --user comic:disposable-test-password-only \
-    http://127.0.0.1:10000/api/workspace -o /tmp/comic-before.json
-image_url=$(node -e 'const s=JSON.parse(require("fs").readFileSync("/tmp/comic-before.json")); console.log(s.workspace.panels[0].images[0].url)')
+    http://127.0.0.1:10000/api/workspace -o "$smoke_tmp_dir/comic-before.json"
+image_url=$(node -e 'const s=JSON.parse(require("fs").readFileSync(process.argv[1])); const image=s.workspace.panels[0].images[0]; if (!image || !/^\/images\/[0-9a-f-]+\.(png|jpg|webp)$/.test(image.url)) process.exit(1); console.log(image.url)' "$smoke_tmp_dir/comic-before.json")
 curl --silent --show-error --fail --user comic:disposable-test-password-only \
-    "http://127.0.0.1:10000$image_url" -o /tmp/comic-image-before
+    "http://127.0.0.1:10000$image_url" -o "$smoke_tmp_dir/comic-image-before"
 docker rm -f comic-ci >/dev/null
+owns_container=false
 # Start a new container, with no application data volume.
 docker run -d --name comic-ci "${runtime_config[@]}" comic-runtime:ci
+owns_container=true
 wait_ready
 curl --silent --show-error --fail --user comic:disposable-test-password-only \
-    http://127.0.0.1:10000/api/workspace -o /tmp/comic-after.json
+    http://127.0.0.1:10000/api/workspace -o "$smoke_tmp_dir/comic-after.json"
 curl --silent --show-error --fail --user comic:disposable-test-password-only \
-    "http://127.0.0.1:10000$image_url" -o /tmp/comic-image-after
-cmp /tmp/comic-before.json /tmp/comic-after.json
-cmp /tmp/comic-image-before /tmp/comic-image-after
+    "http://127.0.0.1:10000$image_url" -o "$smoke_tmp_dir/comic-image-after"
+cmp "$smoke_tmp_dir/comic-before.json" "$smoke_tmp_dir/comic-after.json"
+cmp "$smoke_tmp_dir/comic-image-before" "$smoke_tmp_dir/comic-image-after"
+node scripts/project-smoke.cjs --verify-retention
 echo 'PASS: fresh container retains workspace, revisions, and original image bytes.'
