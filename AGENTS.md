@@ -97,6 +97,11 @@ Never claim validation succeeded unless it was actually run.
 
 ## Documentation
 
+- Always update documentation relevant to agents and Codex as part of the task,
+  including `AGENTS.md`, the agent quickstart and any affected setup, verification
+  or handoff guidance. Keep instructions aligned with the current code and
+  workflow, and record reusable lessons so the next session can start quickly.
+
 Update documentation when implementation changes:
 
 - architecture,
