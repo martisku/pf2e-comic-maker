@@ -275,6 +275,17 @@ async function browserWorkflow() {
     fs.writeFileSync(artifact, JSON.stringify({ list, projects: projectsBefore, images }, null, 2));
     assert.deepEqual(errors, [], 'Browser runtime errors');
     console.log('PASS: create/reopen, metadata autosave, separate project images, unsaved cancel/save/discard, delayed save, history guard, unload warning, phone controls and invalid project recovery');
+  } catch (error) {
+    fs.mkdirSync('artifacts', { recursive: true });
+    console.error('Project browser errors:', errors);
+    console.error('Project browser state:', await page.evaluate(() => ({
+      url: location.href,
+      status: document.querySelector('[role=status]')?.textContent,
+      alerts: [...document.querySelectorAll('[role=alert]')].map(node => node.textContent),
+      dialog: document.querySelector('#unsaved-dialog')?.outerHTML,
+    })).catch(() => 'Page unavailable'));
+    await page.screenshot({ path: 'artifacts/project-failure.png', fullPage: true }).catch(() => {});
+    throw error;
   } finally {
     await browser.close();
   }
