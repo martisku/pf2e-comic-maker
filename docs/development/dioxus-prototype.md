@@ -54,14 +54,16 @@ CLI 0.7.10. Apply the schema explicitly, then build and run the UI/server with
 The server serves the frontend and API on one origin. Configure `COMIC_ORIGIN`
 for the exact browser URL and use HTTPS for real data. Initialize a fresh
 PostgreSQL workspace with the explicit `migrate` command. The application
-needs no local data volume or legacy import. No native application host or live deployment is selected yet.
+needs no local data volume or legacy import. Render Free is the selected native
+host; follow [deployment operations](render-deployment.md) for activation and
+verification of the current live release.
 
 ## Verification commands
 
 ```sh
 cargo fmt --all --check
 cargo test -p comic-model -p comic-server --locked
-cargo clippy -p comic-model -p comic-server --locked -- -D warnings
+cargo clippy -p comic-model -p comic-server --all-targets --locked -- -D warnings
 cargo clippy -p comic-web --target wasm32-unknown-unknown --locked -- -D warnings
 ```
 
@@ -82,8 +84,9 @@ NODE_PATH=/tmp/comic-browser-check/node_modules node scripts/browser-smoke.cjs
 
 Project creation and switching are implemented and verified in the F01 increment above.
 There is no chapter creation, asset library, reference management, backup/restore,
-integrated generation, or finished export yet. Thumbnails and
-browser navigation warnings are also deferred. Original images are served
+integrated generation, or finished export yet. Thumbnails remain deferred.
+Unsaved navigation and browser-close warnings are implemented in F01, subject to
+the browser limitations described above. Original images are served
 directly, so performance with large image collections remains unverified.
 
 PostgreSQL holds each project workspace as a JSONB document with a revision

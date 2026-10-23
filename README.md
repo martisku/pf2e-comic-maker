@@ -14,8 +14,9 @@ overview and composition editor share the same server-saved project data. See
 
 The prototype now uses PostgreSQL and private S3-compatible image storage. See
 [Neon setup, personal access, and recovery](docs/development/neon-storage.md).
-Docker and GitHub Actions verify disposable storage; live account activation and
-a card-free application host are still pending.
+Docker and GitHub Actions verify disposable storage. Render Free is the selected
+application host; see [deployment operations](docs/development/render-deployment.md)
+for activation and live verification. A successful CI run alone does not establish live readiness.
 
 The project is intended to replace a fragmented workflow based on chat history, Markdown files, prompts, reference images, and manually organized generated assets.
 
@@ -281,6 +282,8 @@ Requirement
 → Verification
 ```
 
+For coding agents and Codex, start with the [quickstart](docs/development/agent-quickstart.md).
+
 See:
 
 - `AGENTS.md`
@@ -292,7 +295,9 @@ See:
 
 The application must be accessible through a web browser.
 
-The technical stack has not yet been finalized.
+The current prototype uses Rust, Dioxus 0.7.10/WebAssembly, Axum/Tokio,
+PostgreSQL/SQLx and private S3-compatible storage. Broader milestone architecture
+remains subject to the requirements and planning process.
 
 Early architectural decisions should favor:
 

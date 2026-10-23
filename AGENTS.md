@@ -8,7 +8,10 @@ The product is developed incrementally using a requirements-first workflow.
 
 ## Start here
 
-Before making changes, read the documentation relevant to the task:
+Start with [the agent and Codex quickstart](docs/development/agent-quickstart.md)
+for the startup checklist, code map, verification paths and implementation pitfalls.
+Read [feature status](docs/feature-status.md) before choosing the next feature.
+Read only the documentation relevant to the task:
 
 - Product direction: `docs/product/vision.md`
 - Development workflow: `docs/development/workflow.md`
@@ -31,7 +34,9 @@ Requirement
 → Verification
 ```
 
-Do not implement a draft plan unless explicitly instructed.
+Documentation corrections and small bug fixes may use the simplified workflow.
+Do not implement a draft plan unless explicitly instructed. Existing approval for
+the current scope remains valid; do not request it again.
 
 Approved plans should be implemented according to their documented requirements and acceptance criteria.
 
