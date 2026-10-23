@@ -4,8 +4,9 @@ F01 implementation now adds project UUIDs, names/descriptions, project-scoped
 revisions and upload intents, plus browser project selection and navigation
 guards. Migration `0002_project_workspaces.sql` expands the singleton table in
 place; legacy API routes continue targeting the original project. Each project
-still has the existing one-page/four-panel model. These changes are written but
-have not yet passed compilation or runtime verification in this environment.
+still has the existing one-page/four-panel model. The project-management increment passed native/Wasm builds, linting,
+PostgreSQL/S3 integration and Chromium desktop/phone workflows in
+[CI on 2026-10-23](https://github.com/martisku/pf2e-comic-maker/actions/runs/39986565839).
 See [the F01 plan](../plans/project-workspace.md) and
 [project aggregate decision](../decisions/0002-project-workspace-aggregates.md).
 

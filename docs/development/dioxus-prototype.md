@@ -1,6 +1,6 @@
 # Dioxus web prototype
 
-## F01 project-management increment — verification pending
+## F01 project-management increment — verified in CI, 2026-10-23
 
 The new implementation adds a Projects list, project creation, editable project
 descriptions and independent workspaces with guarded navigation. Projects have
@@ -15,9 +15,12 @@ and upload endpoints continue targeting the original project.
 
 New browser verification is in `scripts/project-smoke.cjs`, called by
 `scripts/container-smoke.sh` before and after the runtime restart. It must run
-only against disposable data. Compilation, Rust formatting/linting, migration
-integration and browser execution for this increment remain pending; the
-historical results below describe previously verified versions.
+only against disposable data. [CI verification](https://github.com/martisku/pf2e-comic-maker/actions/runs/39986565839)
+passed Rust formatting, seven unit tests, native/Wasm Clippy, release builds,
+three PostgreSQL/S3 integration tests, desktop/phone browser workflows and
+fresh-container project/image retention. Screenshots are retained in the
+workflow's `browser-verification` artifact. Live deployment and physical-device
+verification remain separate from these disposable-service results.
 
 Navigation warnings protect unsaved edits where supported. Browser-owned close
 warnings require interaction and cannot protect against every mobile process
@@ -77,7 +80,7 @@ NODE_PATH=/tmp/comic-browser-check/node_modules node scripts/browser-smoke.cjs
 
 ## Deliberate prototype limits
 
-Project creation is written in the F01 increment above and awaits verification.
+Project creation and switching are implemented and verified in the F01 increment above.
 There is no chapter creation, asset library, reference management, backup/restore,
 integrated generation, or finished export yet. Thumbnails and
 browser navigation warnings are also deferred. Original images are served

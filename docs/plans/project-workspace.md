@@ -1,7 +1,7 @@
 # Implementation plan: F01 project workspace, first increment
 
-Status: Approved
-Implementation: Written; compilation and runtime verification pending
+Status: Implemented (project-management increment)
+Verification: Automated CI checks passed, 2026-10-23
 Prepared: 2026-10-22 against repository commit `3ea2a03`.
 Approved explicitly by the user after review on 2026-10-22.
 Requirement: [F01](../requirements/project-workspace.md).
@@ -194,9 +194,8 @@ define relational schema and safe migration. The four-panel limit is temporary
 and must remain visible. No offline queue, project deletion, global active-project
 preference or new hosting service is required.
 
-No unresolved technical blocker was identified. Review and approve the proposed
-scope and plan before implementation, following [AGENTS.md](../../AGENTS.md)
-and the [development workflow](../development/workflow.md).
+The user approved this scope and plan before implementation, following
+[AGENTS.md](../../AGENTS.md) and the [development workflow](../development/workflow.md).
 
 ## Implementation record — 2026-10-22
 
@@ -214,3 +213,30 @@ fresh-container checks have **not run** for this increment. The lockfile additio
 were edited using existing package resolutions and still require Cargo validation.
 Do not interpret written tests or the historical prototype verification as a pass
 for these changes. Keep the plan approved and F01 partial until verification.
+
+## CI verification — 2026-10-23
+
+[GitHub Actions](https://github.com/martisku/pf2e-comic-maker/actions/runs/39986565839) passed for commit
+`d1f44022b05d519bd54c5f24d94a28b3383144ed`:
+
+- Rust formatting, seven model/server unit tests, native all-targets and Wasm Clippy.
+- Optimized server/frontend builds and the runtime Docker image.
+- Three disposable PostgreSQL/S3 integration tests, covering the new project
+  API, creation replay, migration preservation, legacy clients and upload isolation.
+- The existing desktop/phone image, layout, save failure and conflict workflow.
+- Project creation after a lost response, rename/description persistence, reopening,
+  separate images, failed-load retry, unsaved Stay/Save/Discard, edits during save,
+  repeated Back/Forward, supported Chromium unload warnings and invalid deep links.
+- A fresh runtime container retained all projects, revisions, alternatives and
+  original image bytes.
+
+The browser checks exposed missing Dioxus `mounted` support for the native dialog
+and a raw popstate callback spawning outside Dioxus's runtime. The branch now
+enables `mounted` and queues history navigation for a Dioxus effect. Both fixes
+are covered by the passing browser workflow.
+
+Screenshots are available in the `browser-verification` artifact; they have not
+been visually inspected from this sandbox. Physical devices, Safari/Firefox and
+live provider behavior are not established by this CI run. F01 remains Partial
+against the complete milestone model; this plan's project-management increment
+is implemented and automatically verified.

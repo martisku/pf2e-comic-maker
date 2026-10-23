@@ -1,6 +1,7 @@
 # Feature status and delivery order
 
-Last reviewed: **2026-10-22**, against repository commit `3ea2a03`.
+Last reviewed: **2026-10-23**. F01 project-management verification passed for
+commit `d1f4402` in [GitHub Actions](https://github.com/martisku/pf2e-comic-maker/actions/runs/39986565839).
 
 This is the working overview of planned and implemented product features.
 The [feature map](requirements/feature-map.md) defines the approved scope;
@@ -28,7 +29,7 @@ import, replacement, alternatives, and selection scope.
 
 | ID / requirement | Requirement | Implementation plan | Delivery status | Available now | Remaining milestone work |
 | --- | --- | --- | --- | --- | --- |
-| [F01 Project workspace and persistence](requirements/project-workspace.md) | Approved | [Project-management increment: Approved; verification pending](plans/project-workspace.md); prototype storage plan implemented | Partial | Existing verified prototype saving/images. New project creation/opening/switching, descriptions and navigation guards are written but await runtime verification. | Verify the new project increment; persist and verify the complete milestone model as dependent features are added. |
+| [F01 Project workspace and persistence](requirements/project-workspace.md) | Approved | [Project-management increment: Implemented](plans/project-workspace.md); prototype storage plan implemented | Partial | Create/open/switch independent projects, edit names/descriptions, autosave with save/failure status and guarded navigation; isolated images/revisions and restart retention verified in CI. | Persist and verify the complete milestone model as chapters, assets, references and backup/restore are added. |
 | [F02 Chapter management](requirements/chapter-management.md) | Approved | Missing | Not started | No chapter domain model or management UI. | Create/edit/order chapters, title and description, open chapter content, confirmed deletion with panel count while preserving shared assets/references. |
 | [F03 Panel planning](requirements/panel-planning.md) | Approved | Missing | Partial | Four fixed panels with editable title, action and dialogue; blank fields allowed; placement and unplaced state. | Create/delete panels, expression, framing/composition, mood and production notes; chapter ownership and moves; reading order across pages. |
 | [F04 Reusable asset library](requirements/asset-library.md) | Approved | Missing | Not started | No reusable asset model or library UI. | Characters, locations and equipment; descriptions/design notes, character size, browsing/search, shared identity, deletion safeguards. |
@@ -39,8 +40,8 @@ import, replacement, alternatives, and selection scope.
 | [F11 Image alternatives and selection](requirements/panel-images.md) | Approved, selected scope | Missing | Partial | Retained image alternatives, visual/dropdown selection and return to an earlier image; server persistence. | Complete project backup/restore and integration with the full panel lifecycle. Formal feedback, comparison and approval are future scope. |
 | [F19 Page layouts](requirements/page-layouts.md) | Approved | Missing | Partial | One working page; full-page, 2×2 and wide-above-two templates; slot placement, retained unplaced panels, contain/fill and crop position. | Chapter-owned pages, page creation/reordering/confirmed removal, reading order across pages, full backup/restore. |
 
-The model currently enforces **exactly four panels** and has a single layout and
-slot list in one workspace. Screen labels such as “Chapter panels” do not imply
+Each project currently enforces **exactly four panels** and has a single layout
+and slot list in its own saved workspace. Screen labels such as “Chapter panels” do not imply
 chapter management exists. The separate design study's chapter and character
 screens are not implemented product features.
 
@@ -79,8 +80,9 @@ reports a live HTTP 503 whose provider cause remains unverified. Diagnostics are
 implemented; successful live image uploads still need confirmation. Historical
 live-activation notes do not establish the current provider state.
 
-This overview is based on code and existing verification records, not a new
-browser test or a live infrastructure audit. Implementation evidence:
+The F01 increment has fresh CI browser/integration verification linked above.
+Other feature statuses use code and existing records; this is not a live
+infrastructure audit. Implementation evidence:
 [shared model](../crates/model/src/lib.rs), [browser UI](../crates/web/src/main.rs),
 [HTTP routes](../crates/server/src/lib.rs), and
 [browser smoke workflow](../scripts/browser-smoke.cjs).
@@ -108,7 +110,7 @@ This sequence is a proposal, not an approved implementation plan.
 
 For each delivery step, create a focused plan under `docs/plans/`, review and
 approve it using the [development workflow](development/workflow.md), then
-implement and verify. The [F01 project-management plan](plans/project-workspace.md) is approved and its code/tests are written. Compilation and runtime verification are the next delivery task; the complete milestone persistence criterion remains open.
+implement and verify. The [F01 project-management increment](plans/project-workspace.md) is implemented and verified in CI. The next planning task is **F02: chapter management**; F01's complete milestone persistence criterion remains open.
 
 ## Keeping this overview current
 
