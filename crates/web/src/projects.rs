@@ -153,6 +153,7 @@ pub struct Session {
     pending: Signal<Option<Navigation>>,
     flushing: Signal<bool>,
     failed_navigation: Signal<Option<Navigation>>,
+    browser_navigation: Signal<Option<Navigation>>,
 }
 
 impl Session {
@@ -181,6 +182,10 @@ impl Session {
             push: true,
             history_index: None,
         });
+    }
+
+    fn queue_browser_navigation(mut self, navigation: Navigation) {
+        self.browser_navigation.set(Some(navigation));
     }
 
     fn navigate(mut self, navigation: Navigation) {
@@ -323,6 +328,7 @@ pub fn use_session() -> Session {
         pending: use_signal(|| None),
         flushing: use_signal(|| false),
         failed_navigation: use_signal(|| None),
+        browser_navigation: use_signal(|| None),
     };
     use_hook(move || {
         let mut session = session;
@@ -401,6 +407,16 @@ pub fn use_session() -> Session {
             }
         });
     });
+    use_effect(move || {
+        let navigation = session.browser_navigation.read().clone();
+        if let Some(navigation) = navigation {
+            let mut session = session;
+            session.browser_navigation.set(None);
+            // Native popstate callbacks run outside Dioxus's runtime. Handle
+            // navigation here so any spawned load has a runtime and scope.
+            session.navigate(navigation);
+        }
+    });
     let events = use_hook(move || Rc::new(BrowserEvents::new(session)));
     use_effect(move || {
         events
@@ -441,7 +457,7 @@ impl BrowserEvents {
                 }
             });
             if let Some((target, index)) = restored {
-                session.navigate(Navigation {
+                session.queue_browser_navigation(Navigation {
                     target,
                     push: false,
                     history_index: Some(index),
@@ -450,7 +466,7 @@ impl BrowserEvents {
             }
             let target = location_target();
             if current_index == event_index {
-                session.navigate(Navigation {
+                session.queue_browser_navigation(Navigation {
                     target,
                     push: false,
                     history_index: None,

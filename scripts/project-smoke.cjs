@@ -43,6 +43,9 @@ async function browserWorkflow() {
   const errors = [];
   context.on('page', opened => opened.on('pageerror', error => errors.push(error.message)));
   page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error') console.error('Project browser console:', message.text());
+  });
   const suffix = randomUUID().slice(0, 8);
   const firstName = `Browser project A ${suffix}`;
   const secondName = `Browser project B ${suffix}`;
@@ -105,17 +108,20 @@ async function browserWorkflow() {
   try {
     await page.goto(`${baseURL}/?view=projects`);
     await page.getByRole('heading', { name: 'Your projects', exact: true }).waitFor();
-    const first = await create(firstName, 'A description survives reopening.', true);
+    const initialFirstName = `${firstName} draft`;
+    const first = await create(initialFirstName, 'A description survives reopening.', true);
     const afterRetry = await (await context.request.get(`${baseURL}/api/projects`)).json();
-    assert.equal(afterRetry.filter(project => project.name === firstName).length, 1, 'Retrying creation must not create a duplicate');
+    assert.equal(afterRetry.filter(project => project.name === initialFirstName).length, 1, 'Retrying creation must not create a duplicate');
     assert((await read(first)).workspace.panels.every(panel => panel.action === '' && panel.dialogue === '' && panel.images.length === 0), 'A new project must contain blank planning panels');
+    await page.getByLabel('Project title', { exact: true }).fill(firstName);
     await page.getByLabel('Project description', { exact: true }).fill('A revised description.');
     await editor().getByLabel('Action & composition').fill('Only project A contains this action.');
-    await waitForData(first, s => s.description === 'A revised description.' && s.workspace.panels[0].action === 'Only project A contains this action.');
+    await waitForData(first, s => s.workspace.title === firstName && s.description === 'A revised description.' && s.workspace.panels[0].action === 'Only project A contains this action.');
     await saved();
     await page.reload();
     await saved();
     assert.equal(new URL(page.url()).searchParams.get('project'), first);
+    assert.equal(await page.getByLabel('Project title', { exact: true }).inputValue(), firstName);
     assert.equal(await page.getByLabel('Project description', { exact: true }).inputValue(), 'A revised description.');
 
     // Distinct project identities must isolate even the same numbered panels.
@@ -144,7 +150,19 @@ async function browserWorkflow() {
     assert.deepEqual(await read(first), firstBefore);
     assert.notEqual((await read(second)).workspace.panels[0].selected_image, firstBefore.workspace.panels[0].selected_image);
     await projects().click();
-    await open(firstName);
+    // A failed destination load retains the list and retries that destination.
+    await page.route(`**/api/projects/${first}`, route => {
+      if (route.request().method() === 'GET') return route.fulfill({ status: 503, body: 'Project load is temporarily unavailable.' });
+      return route.continue();
+    });
+    await page.getByRole('button', { name: `Open project ${firstName}`, exact: true }).click();
+    await page.getByRole('alert').waitFor();
+    assert(await page.getByRole('heading', { name: 'Your projects', exact: true }).isVisible());
+    await page.unroute(`**/api/projects/${first}`);
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+    await page.getByLabel('Project title', { exact: true }).waitFor();
+    await saved();
+    assert.equal(new URL(page.url()).searchParams.get('project'), first);
     assert.equal(await editor().getByLabel('Action & composition').inputValue(), 'Only project A contains this action.');
 
     // A failed autosave keeps the draft, guards navigation and supports retry.
@@ -226,20 +244,27 @@ async function browserWorkflow() {
     await page.goBack();
     await dialog().getByRole('button', { name: 'Discard changes and continue', exact: true }).click();
     await page.getByRole('heading', { name: 'Your projects', exact: true }).waitFor();
+    await page.waitForURL(url => url.searchParams.get('view') === 'projects');
     assert.equal(new URL(page.url()).searchParams.get('view'), 'projects');
     await unblockSave(second);
     await page.goForward();
+    await page.waitForURL(url => url.searchParams.get('project') === second);
+    await page.getByLabel('Project title', { exact: true }).waitFor();
     await saved();
     assert.equal(new URL(page.url()).searchParams.get('project'), second);
     assert.equal(await editor().getByLabel('Dialogue').inputValue(), '');
     await page.goBack();
     await page.getByRole('heading', { name: 'Your projects', exact: true }).waitFor();
+    await page.waitForURL(url => url.searchParams.get('view') === 'projects');
     await page.goBack();
+    await page.waitForURL(url => url.searchParams.get('project') === first);
+    await page.getByLabel('Project title', { exact: true }).waitFor();
     await saved();
     assert.equal(new URL(page.url()).searchParams.get('project'), first);
     assert.equal(await editor().getByLabel('Dialogue').inputValue(), 'Latest edit while saving.');
     await page.goForward();
     await page.getByRole('heading', { name: 'Your projects', exact: true }).waitFor();
+    await page.waitForURL(url => url.searchParams.get('view') === 'projects');
 
     // The project controls and editor remain usable at phone width.
     await page.setViewportSize({ width: 390, height: 844 });
