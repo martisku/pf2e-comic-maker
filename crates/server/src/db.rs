@@ -156,8 +156,8 @@ async fn locked_project(
     tx: &mut Transaction<'_, Postgres>,
     project: Uuid,
 ) -> Result<ProjectRow, ApiError> {
-    Ok(sqlx::query_as("SELECT project_id, description, revision, data FROM workspace WHERE project_id = $1 FOR UPDATE")
-        .bind(project).fetch_optional(&mut **tx).await?.ok_or_else(missing_project)?)
+    sqlx::query_as("SELECT project_id, description, revision, data FROM workspace WHERE project_id = $1 FOR UPDATE")
+        .bind(project).fetch_optional(&mut **tx).await?.ok_or_else(missing_project)
 }
 
 async fn write_project(
