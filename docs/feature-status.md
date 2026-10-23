@@ -112,6 +112,20 @@ For each delivery step, create a focused plan under `docs/plans/`, review and
 approve it using the [development workflow](development/workflow.md), then
 implement and verify. The [F01 project-management increment](plans/project-workspace.md) is implemented and verified in CI. The next planning task is **F02: chapter management**; F01's complete milestone persistence criterion remains open.
 
+## Parallel delivery recommendation
+
+Plan **F02 chapters** and **F04 assets** in parallel, then implement them after
+agreeing shared project-model and persistence contracts. Keep **F03 panels and
+F19 layouts** in one coordinated stream; it can run alongside **F05 references**
+after their respective chapter and asset foundations land. **F06 associations**
+needs stable panel/asset identities and can then proceed alongside F05.
+Plan F07 backup/versioning early, but complete its integration after the selected
+milestone data model is available. Dependent acceptance criteria remain open.
+
+See [parallel feature delivery](development/parallel-feature-delivery.md) for
+prerequisites, delivery waves, shared-file risks and agent ownership. This is a
+recommendation; focused implementation plans still require review/approval.
+
 ## Keeping this overview current
 
 When work changes a feature, update its row with the plan link/status, available

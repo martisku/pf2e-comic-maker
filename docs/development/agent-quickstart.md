@@ -31,8 +31,10 @@ on 2026-10-23. It includes independent projects, names/descriptions, guarded
 autosave/navigation and isolated image/revision storage. Each project still has
 one composition page and exactly four panels. F01 remains **Partial** against
 the complete milestone; see the feature-status table for dependent criteria.
-The next proposed task is to **plan F02 chapter management**; its approved
-requirement does not authorize implementation of a missing plan.
+The next proposed work is to **plan F02 chapter management and F04 assets in
+parallel**, agreeing shared contracts before implementation. See
+[parallel delivery](parallel-feature-delivery.md). Approved requirements do not
+authorize implementation of missing plans.
 
 The public service URL is <https://pf2e-comic-maker.onrender.com>.
 Repository verification, a merged PR and a live deployment are separate facts.
