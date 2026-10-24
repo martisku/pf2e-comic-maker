@@ -238,7 +238,10 @@ fn App() -> Element {
                                 select { value: page.layout.css_class(), "aria-label": "Page layout",
                                     oninput: move |event| {
                                         let layout = match event.value().as_str() { "full" => Layout::Full, "wide" => Layout::Wide, _ => Layout::Grid };
-                                        if let Some(snapshot) = state.write().as_mut() { if let Some(page) = snapshot.workspace.chapter_mut(chapter_id).and_then(|c| c.pages.first_mut()) { page.change_layout(layout); dirty.set(true); } }
+                                        if let Some(snapshot) = state.write().as_mut()
+                                            && let Some(page) = snapshot.workspace.chapter_mut(chapter_id).and_then(|c| c.pages.first_mut()) {
+                                            page.change_layout(layout); dirty.set(true);
+                                        }
                                     },
                                     option { value: "grid", selected: page.layout == Layout::Grid, "2 × 2 grid" }
                                     option { value: "wide", selected: page.layout == Layout::Wide, "Wide + two" }
@@ -302,7 +305,10 @@ fn App() -> Element {
                                         select { value: position.map(|i| i.to_string()).unwrap_or_else(|| "unplaced".into()),
                                             oninput: move |event| {
                                                 let target = event.value().parse::<usize>().ok();
-                                                if let Some(snapshot) = state.write().as_mut() { if let Some(page) = snapshot.workspace.chapter_mut(chapter_id).and_then(|c| c.pages.first_mut()) { page.place(id, target); dirty.set(true); } }
+                                                if let Some(snapshot) = state.write().as_mut()
+                                                    && let Some(page) = snapshot.workspace.chapter_mut(chapter_id).and_then(|c| c.pages.first_mut()) {
+                                                    page.place(id, target); dirty.set(true);
+                                                }
                                             },
                                             option { value: "unplaced", selected: position.is_none(), "Unplaced" }
                                             for slot in 0..page.slots.len() { option { value: "{slot}", selected: position == Some(slot), "Position {slot + 1}" } }

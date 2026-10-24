@@ -612,8 +612,10 @@ mod tests {
         encoded["schema_version"] = WORKSPACE_SCHEMA_VERSION.into();
         encoded.as_object_mut().unwrap().remove("chapters");
         assert!(serde_json::from_value::<Workspace>(encoded).is_err());
-        let mut workspace = Workspace::default();
-        workspace.next_panel_id = i32::MAX as u32;
+        let mut workspace = Workspace {
+            next_panel_id: i32::MAX as u32,
+            ..Workspace::default()
+        };
         assert_eq!(workspace.add_panel(1).unwrap(), i32::MAX as u32);
         assert!(workspace.add_panel(1).is_err());
         workspace.validate().unwrap();

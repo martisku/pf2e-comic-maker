@@ -33,7 +33,7 @@ pub fn ChapterManager(
                 .cloned()
         });
     rsx! {
-        style { "
+        style { {"
             .chapter-manager { margin: 0 0 1.5rem; padding: 1rem; border: 1px solid #b99b6355; border-radius: 12px; background: #142923; }
             .chapter-heading, .chapter-row, .chapter-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
             .chapter-heading { justify-content: space-between; }
@@ -45,7 +45,7 @@ pub fn ChapterManager(
             .chapter-details label { display: grid; gap: .4rem; }
             .chapter-details input, .chapter-details textarea { width: 100%; }
             @media (max-width: 700px) { .chapter-details { grid-template-columns: 1fr; } }
-        " }
+        "} }
         section { class: "chapter-manager", "aria-label": "Chapter management",
             div { class: "chapter-heading",
                 h2 { "Chapters" }

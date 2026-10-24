@@ -121,26 +121,26 @@ fs.mkdirSync(output, { recursive: true });
     await saved();
 
     await page.getByRole('combobox', { name: 'Page layout' }).selectOption('wide');
-    await waitForData(s => s.workspace.layout === 'Wide');
+    await waitForData(s => s.workspace.chapters[0].pages[0].layout === 'Wide');
     assert.equal(await page.locator('.page-panel').count(), 3);
     assert.match(await page.locator('.panel-card').nth(3).innerText(), /Unplaced/);
     assert.equal((await read()).workspace.panels.length, 4);
     await page.getByRole('combobox', { name: 'Page layout' }).selectOption('grid');
-    await waitForData(s => s.workspace.layout === 'Grid');
+    await waitForData(s => s.workspace.chapters[0].pages[0].layout === 'Grid');
     await page.locator('.panel-card').nth(3).click();
     await editor.getByLabel('Page position').selectOption('3');
-    await waitForData(s => s.workspace.slots[3] === 4);
+    await waitForData(s => s.workspace.chapters[0].pages[0].slots[3] === 4);
     await saved();
     await page.getByRole('combobox', { name: 'Page layout' }).selectOption('full');
-    await waitForData(s => s.workspace.layout === 'Full');
+    await waitForData(s => s.workspace.chapters[0].pages[0].layout === 'Full');
     assert.equal(await page.locator('.page-panel').count(), 1);
     assert.equal((await read()).workspace.panels.length, 4);
     await page.getByRole('combobox', { name: 'Page layout' }).selectOption('grid');
-    await waitForData(s => s.workspace.layout === 'Grid');
+    await waitForData(s => s.workspace.chapters[0].pages[0].layout === 'Grid');
     for (let id = 2; id <= 4; id++) {
       await page.locator('.panel-card').nth(id - 1).click();
       await editor.getByLabel('Page position').selectOption(String(id - 1));
-      await waitForData(s => s.workspace.slots[id - 1] === id);
+      await waitForData(s => s.workspace.chapters[0].pages[0].slots[id - 1] === id);
     }
     await saved();
 
