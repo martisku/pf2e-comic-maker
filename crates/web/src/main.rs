@@ -1,3 +1,5 @@
+mod assets;
+mod chapters;
 mod projects;
 
 use comic_model::{Layout, MAX_IMAGE_BYTES, Panel, ProjectSnapshot};
@@ -36,12 +38,56 @@ fn App() -> Element {
     let mut error = session.error;
     let mut selected = use_signal(|| 1u32);
     let mut overview = use_signal(|| false);
+    let mut library = use_signal(|| false);
+    let mut selected_chapter = use_signal(|| 1u32);
+    let mut selection_project = use_signal(|| None::<String>);
+    use_effect(move || {
+        let project = state
+            .read()
+            .as_ref()
+            .map(|snapshot| snapshot.project_id.clone());
+        if project != *selection_project.peek() {
+            selection_project.set(project);
+            selected_chapter.set(0);
+            selected.set(0);
+        }
+    });
 
     let snapshot = state.read().clone();
-    let workspace = snapshot.as_ref().map(|s| s.workspace.clone());
-    let active = workspace
+    let project_key = snapshot
         .as_ref()
-        .and_then(|w| w.panels.iter().find(|p| p.id == selected()).cloned());
+        .map(|snapshot| snapshot.project_id.as_str())
+        .unwrap_or_default();
+    let workspace = snapshot.as_ref().map(|s| s.workspace.clone());
+    let chapter = workspace.as_ref().and_then(|w| {
+        w.chapters
+            .iter()
+            .find(|c| c.id == selected_chapter())
+            .or_else(|| w.chapters.first())
+            .cloned()
+    });
+    let chapter_id = chapter.as_ref().map(|c| c.id).unwrap_or(0);
+    let page = chapter.as_ref().and_then(|c| c.pages.first()).cloned();
+    let panels: Vec<Panel> = workspace
+        .as_ref()
+        .map(|w| {
+            w.panels
+                .iter()
+                .filter(|p| {
+                    chapter
+                        .as_ref()
+                        .is_some_and(|c| c.panel_ids.contains(&p.id))
+                })
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    let active = panels
+        .iter()
+        .find(|p| p.id == selected())
+        .or_else(|| panels.first())
+        .cloned();
+    let active_id = active.as_ref().map(|p| p.id);
     let visible_status = if dirty() && !busy() && error().is_none() {
         "Unsaved changes".to_string()
     } else {
@@ -61,11 +107,14 @@ fn App() -> Element {
             nav { "aria-label": "Workspace views",
                 button { class: "archive-nav", disabled: busy(), onclick: move |_| session.request(Target::List), "Projects" }
 
-                button { class: if overview() { "archive-nav active" } else { "archive-nav" }, "aria-pressed": overview(), onclick: move |_| { if session.show_list() || session.show_new() { session.current(); } overview.set(true); },
+                button { class: if overview() && !library() { "archive-nav active" } else { "archive-nav" }, "aria-pressed": overview() && !library(), onclick: move |_| { if session.show_list() || session.show_new() { session.current(); } overview.set(true); library.set(false); },
                     span { "◇" } "Story overview"
                 }
-                button { class: if !overview() { "archive-nav active" } else { "archive-nav" }, "aria-pressed": !overview(), onclick: move |_| { if session.show_list() || session.show_new() { session.current(); } overview.set(false); },
+                button { class: if !overview() && !library() { "archive-nav active" } else { "archive-nav" }, "aria-pressed": !overview() && !library(), onclick: move |_| { if session.show_list() || session.show_new() { session.current(); } overview.set(false); library.set(false); },
                     span { "▤" } "Page composition"
+                }
+                button { class: if library() { "archive-nav active" } else { "archive-nav" }, "aria-pressed": library(), onclick: move |_| { if session.show_list() || session.show_new() { session.current(); } library.set(true); },
+                    span { "◇" } "Asset library"
                 }
             }
             div { class: "archive-motto", span { "◇" } p { "Every story begins" br {} "with a single panel." }
@@ -74,7 +123,7 @@ fn App() -> Element {
         }
         div { class: "studio",
             header { class: "topbar",
-                div { class: "breadcrumb", span { "Workspace" } span { class: "breadcrumb-divider", "/" } strong { if overview() { "Story overview" } else { "Page composition" } } }
+                div { class: "breadcrumb", span { "Workspace" } span { class: "breadcrumb-divider", "/" } strong { if library() { "Asset library" } else if overview() { "Story overview" } else { "Page composition" } } }
                 div { class: "topbar-right", span { class: "prototype", "WORKING EDITION" }
                     span { role: "status", class: if error().is_some() { "save-status failed" } else { "save-status" }, "{visible_status}" }
                 }
@@ -113,6 +162,11 @@ fn App() -> Element {
                     }
                     p { class: "intro", "Plan each moment. Arrange the page. Replace only the image you want to change." }
                 }
+                if library() {
+                    assets::AssetLibrary { key: "{project_key}", state, dirty }
+                } else {
+                chapters::ChapterManager { key: "{project_key}", session, selected: selected_chapter, selected_panel: selected }
+                if let Some(page) = page {
                 if overview() {
                     main { class: "story-overview", "aria-label": "Story overview",
                         section { class: "archive-hero",
@@ -125,15 +179,15 @@ fn App() -> Element {
                             span { class: "art-credit", "ATMOSPHERE ART · NOT PROJECT CONTENT" }
                         }
                         div { class: "overview-heading", h2 { "Moments in your story" }
-                            span { "{workspace.panels.len()} panels · one working page" }
+                            span { "{panels.len()} panels · one working page" }
                         }
                         div { class: "story-grid",
-                            for panel in workspace.panels.iter() {
+                            for panel in panels.iter() {
                                 {
                                     let id = panel.id;
-                                    let position = workspace.slots.iter().position(|p| *p == Some(id));
+                                    let position = page.slots.iter().position(|p| *p == Some(id));
                                     rsx! {
-                                        button { class: "story-card", onclick: move |_| { selected.set(id); overview.set(false); },
+                                        button { class: "story-card", onclick: move |_| { selected.set(id); overview.set(false); library.set(false); },
                                             div { class: "story-card-art",
                                                 if let Some(url) = panel.image_url() {
                                                     img { src: "{url}", alt: "", loading: "lazy" }
@@ -157,12 +211,12 @@ fn App() -> Element {
                 }
                 main { class: if overview() { "workspace is-hidden" } else { "workspace" },
                     nav { class: "panel-list", "aria-label": "Chapter panels",
-                        div { class: "section-label", span { "PANELS" } span { "{workspace.panels.len()}" } }
-                        for panel in workspace.panels.iter() {
+                        div { class: "section-label", span { "PANELS" } span { "{panels.len()}" } }
+                        for panel in panels.iter() {
                             {
                                 let id = panel.id;
-                                let position = workspace.slots.iter().position(|p| *p == Some(id));
-                                let is_active = id == selected();
+                                let position = page.slots.iter().position(|p| *p == Some(id));
+                                let is_active = Some(id) == active_id;
                                 rsx! {
                                     button { class: if is_active { "panel-card active" } else { "panel-card" },
                                         onclick: move |_| selected.set(id), "aria-pressed": is_active,
@@ -181,25 +235,28 @@ fn App() -> Element {
                         div { class: "composition-toolbar",
                             div { p { class: "eyebrow", "PAGE 01" } h2 { "Page composition" } }
                             label { "Layout"
-                                select { value: workspace.layout.css_class(), "aria-label": "Page layout",
+                                select { value: page.layout.css_class(), "aria-label": "Page layout",
                                     oninput: move |event| {
                                         let layout = match event.value().as_str() { "full" => Layout::Full, "wide" => Layout::Wide, _ => Layout::Grid };
-                                        if let Some(snapshot) = state.write().as_mut() { snapshot.workspace.change_layout(layout); dirty.set(true); }
+                                        if let Some(snapshot) = state.write().as_mut()
+                                            && let Some(page) = snapshot.workspace.chapter_mut(chapter_id).and_then(|c| c.pages.first_mut()) {
+                                            page.change_layout(layout); dirty.set(true);
+                                        }
                                     },
-                                    option { value: "grid", selected: workspace.layout == Layout::Grid, "2 × 2 grid" }
-                                    option { value: "wide", selected: workspace.layout == Layout::Wide, "Wide + two" }
-                                    option { value: "full", selected: workspace.layout == Layout::Full, "Full page" }
+                                    option { value: "grid", selected: page.layout == Layout::Grid, "2 × 2 grid" }
+                                    option { value: "wide", selected: page.layout == Layout::Wide, "Wide + two" }
+                                    option { value: "full", selected: page.layout == Layout::Full, "Full page" }
                                 }
                             }
                         }
                         div { class: "page-surround",
-                            div { class: "comic-page {workspace.layout.css_class()}",
-                                for (slot, panel_id) in workspace.slots.iter().enumerate() {
+                            div { class: "comic-page {page.layout.css_class()}",
+                                for (slot, panel_id) in page.slots.iter().enumerate() {
                                     {
-                                        let panel = panel_id.and_then(|id| workspace.panels.iter().find(|p| p.id == id)).cloned();
+                                        let panel = panel_id.and_then(|id| panels.iter().find(|p| p.id == id)).cloned();
                                         rsx! {
                                             if let Some(panel) = panel {
-                                                button { class: if panel.id == selected() { "page-panel selected" } else { "page-panel" },
+                                                button { class: if Some(panel.id) == active_id { "page-panel selected" } else { "page-panel" },
                                                     "aria-label": "Edit position {slot + 1}: {panel.title}",
                                                     onclick: move |_| selected.set(panel.id),
                                                     if let Some(url) = panel.image_url() {
@@ -225,7 +282,7 @@ fn App() -> Element {
                     if let Some(panel) = active {
                         {
                             let id = panel.id;
-                            let position = workspace.slots.iter().position(|p| *p == Some(id));
+                            let position = page.slots.iter().position(|p| *p == Some(id));
                             let upload_disabled = busy() || dirty() || error().is_some();
                             rsx! {
                                 aside { class: "editor", "aria-label": "Panel editor",
@@ -236,6 +293,10 @@ fn App() -> Element {
                                     label { "Action & composition"
                                         textarea { rows: "4", value: "{panel.action}", oninput: move |e| edit_panel(state, dirty, id, |p| p.action = e.value()) }
                                     }
+                                    label { "Expression"
+                                        textarea { rows: "2", "aria-label": "Panel expression", value: "{panel.expression}", oninput: move |e| edit_panel(state, dirty, id, |p| p.expression = e.value()) }
+                                    }
+                                    assets::PanelAssetsEditor { state, dirty, panel_id: id }
                                     label { "Dialogue"
                                         textarea { rows: "2", placeholder: "What is said in this moment?", value: "{panel.dialogue}",
                                             oninput: move |e| edit_panel(state, dirty, id, |p| p.dialogue = e.value()) }
@@ -244,10 +305,13 @@ fn App() -> Element {
                                         select { value: position.map(|i| i.to_string()).unwrap_or_else(|| "unplaced".into()),
                                             oninput: move |event| {
                                                 let target = event.value().parse::<usize>().ok();
-                                                if let Some(snapshot) = state.write().as_mut() { snapshot.workspace.place(id, target); dirty.set(true); }
+                                                if let Some(snapshot) = state.write().as_mut()
+                                                    && let Some(page) = snapshot.workspace.chapter_mut(chapter_id).and_then(|c| c.pages.first_mut()) {
+                                                    page.place(id, target); dirty.set(true);
+                                                }
                                             },
                                             option { value: "unplaced", selected: position.is_none(), "Unplaced" }
-                                            for slot in 0..workspace.slots.len() { option { value: "{slot}", selected: position == Some(slot), "Position {slot + 1}" } }
+                                            for slot in 0..page.slots.len() { option { value: "{slot}", selected: position == Some(slot), "Position {slot + 1}" } }
                                         }
                                     }
                                     div { class: "image-section",
@@ -269,9 +333,11 @@ fn App() -> Element {
                                                             Ok(saved) if saved.project_id == before.project_id => {
                                                                 if let Some(current) = state.write().as_mut() {
                                                                     current.revision = saved.revision;
-                                                                    for (local, remote) in current.workspace.panels.iter_mut().zip(saved.workspace.panels) {
-                                                                        local.images = remote.images;
-                                                                        if local.id == id { local.selected_image = remote.selected_image; }
+                                                                    for local in &mut current.workspace.panels {
+                                                                        if let Some(remote) = saved.workspace.panels.iter().find(|remote| remote.id == local.id) {
+                                                                            local.images = remote.images.clone();
+                                                                            if local.id == id { local.selected_image = remote.selected_image.clone(); }
+                                                                        }
                                                                     }
                                                                 }
                                                                 status.set(if dirty() { "Unsaved changes" } else { "Saved" }.into());
@@ -339,6 +405,8 @@ fn App() -> Element {
                             }
                         }
                     }
+                }
+                }
                 }
             }
             } else {

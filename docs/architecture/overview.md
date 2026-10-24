@@ -1,10 +1,27 @@
 # Current architecture
 
+The chapter/library increment adds ordered chapters with one editable composition
+page each, variable panel creation, expression text, and a shared library of
+characters, locations and equipment with panel associations. Implementation passed local build, browser and fresh-container retention
+verification on `feature/chapters-and-assets`; this is not a live deployment claim. See the [chapter plan](../plans/chapter-management.md),
+[asset plan](../plans/asset-library.md), and
+[aggregate extension decision](../decisions/0003-chapters-and-assets-in-project-aggregates.md).
+
+Panels retain project-wide identities for the upload catalog. The versioned JSONB
+workspace owns chapters, page placements and shared assets. Legacy stored documents
+are read into a first chapter without changing image IDs or alternatives. Old
+client writes are rejected; deploy the server and frontend together and reload
+older browser tabs. Migration `0003_chapter_panels.sql` removes the original
+four-panel upload constraint. Panel identity allocation is monotonic, and normal
+saves validate image records by panel ID. Chapter deletion preserves shared
+assets; referenced assets cannot be removed until their associations are removed.
+
+
 F01 implementation now adds project UUIDs, names/descriptions, project-scoped
 revisions and upload intents, plus browser project selection and navigation
 guards. Migration `0002_project_workspaces.sql` expands the singleton table in
-place; legacy API routes continue targeting the original project. Each project
-still has the existing one-page/four-panel model. The project-management increment passed native/Wasm builds, linting,
+place; legacy API routes continue targeting the original project. That increment originally retained one page and four panels per project;
+the chapter increment above extends that model. The project-management increment passed native/Wasm builds, linting,
 PostgreSQL/S3 integration and Chromium desktop/phone workflows in
 [CI on 2026-10-23](https://github.com/martisku/pf2e-comic-maker/actions/runs/39986565839).
 See [the F01 plan](../plans/project-workspace.md) and
