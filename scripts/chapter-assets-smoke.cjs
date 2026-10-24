@@ -73,7 +73,7 @@ const password = process.env.COMIC_TEST_PASSWORD || '';
     await createAsset('Character', 'Moss');
     await createAsset('Location', 'Old tower');
     await createAsset('Equipment', 'Silver bow');
-    let snapshot = await waitData(id, w => w.assets.length === 3 && w.assets.some(a => a.name === 'Silver bow'));
+    let snapshot = await waitData(id, w => w.assets.length === 3 && w.assets.some(a => a.name === 'Silver bow' && a.description === 'Silver bow description' && a.design_notes === 'Silver bow design'));
     assert.deepEqual(snapshot.workspace.assets.map(a => [a.kind, a.name, a.description, a.design_notes]), [
       ['Character', 'Moss', 'Moss description', 'Moss design'],
       ['Location', 'Old tower', 'Old tower description', 'Old tower design'],
@@ -152,6 +152,9 @@ const password = process.env.COMIC_TEST_PASSWORD || '';
     assert.deepEqual(snapshot.workspace.panels, beforeDelete.panels.filter(p => snapshot.workspace.chapters[0].panel_ids.includes(p.id)));
     await page.reload(); await saved();
     assert.equal(await page.getByLabel('Chapter description', { exact: true }).inputValue(), 'Retained chapter description');
+    await selectPanel(1);
+    assert.equal(await page.getByLabel('Panel location', { exact: true }).inputValue(), location.id);
+    assert(await page.getByRole('checkbox', { name: 'Silver bow', exact: true }).isChecked());
     await assetView();
     await page.getByLabel('Asset type', { exact: true }).selectOption('Location');
     await button('Old tower').click();

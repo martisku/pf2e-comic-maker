@@ -1,6 +1,6 @@
 # Implementation plan: Reusable assets and panel associations
 
-Status: Approved
+Status: Implemented
 
 Reviewed by the orchestrator on 2026-10-23 under the user’s explicit instruction
 to plan and then implement with agents.
@@ -123,3 +123,13 @@ No product decision blocks the selected increment. F06 remains partial until F05
 provides associated reference viewing and the full panel field workflow is
 verified. Backup/restore remains F07. Do not claim the entire first milestone or
 live deployment verified from model/build checks alone.
+
+## Implementation and verification — 2026-10-24
+
+Implemented the selected increment after plan review. Model/server tests,
+PostgreSQL/S3 integration, formatting, native/Wasm Clippy, native and Dioxus
+release builds, and Chromium acceptance workflows passed locally. Final runtime
+retention results and exact scope limits are recorded in the
+[verification report](../development/chapter-assets-verification.md).
+This is not a live deployment or a new CI result. Deferred features remain as
+listed above; in particular, F06 reference viewing depends on F05.

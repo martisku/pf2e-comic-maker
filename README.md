@@ -312,13 +312,15 @@ Significant technical decisions should be recorded under:
 
 ## Project status
 
-The illustrated workspace design and prototype storage/deployment code are in
-place. The first milestone is partially implemented: the current workspace has
-four fixed panels, image alternatives and one composition page. Independent projects with names/descriptions, guarded autosave and isolated
-images are implemented and verified in CI. Chapter management, reusable assets,
-visual references and backup/restore remain.
+The illustrated workspace and project persistence are in place. The next
+increment adds chapter creation, editing, ordering and confirmed deletion, panel
+creation and expression text, plus a searchable library of characters, locations
+and equipment that panels can share. Each chapter currently has one composition
+page. This increment passed local build, integration, browser and fresh-container
+retention verification on `feature/chapters-and-assets`; it has not been deployed.
 
-See the [feature status and recommended delivery order](docs/feature-status.md)
-for all 19 features, requirement and implementation-plan status, remaining work,
-and verification evidence. The [F01 project-management increment](docs/plans/project-workspace.md)
-is verified; the next planning task is F02: chapter management.
+Visual references, complete panel/page management and backup/restore remain.
+See the [feature status and delivery order](docs/feature-status.md),
+[chapter implementation plan](docs/plans/chapter-management.md),
+[asset implementation plan](docs/plans/asset-library.md), and
+[parallel delivery review](docs/plans/parallel-delivery-review.md).

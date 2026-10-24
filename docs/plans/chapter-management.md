@@ -1,6 +1,6 @@
 # Implementation plan: Chapter management
 
-Status: Approved
+Status: Implemented
 
 Reviewed by the orchestration agent on 2026-10-23; implementation authorized
 by the user’s request for agent planning followed by implementation.
@@ -142,3 +142,13 @@ No live deployment or destructive production migration is included.
 4. Add chapter UI and adapt editor/overview/upload merge to chapter selection.
 5. Update browser smoke coverage and verify combined chapter/asset behavior.
 6. Update status, architecture and migration documentation with actual evidence.
+
+## Implementation and verification — 2026-10-24
+
+Implemented the selected increment after plan review. Model/server tests,
+PostgreSQL/S3 integration, formatting, native/Wasm Clippy, native and Dioxus
+release builds, and Chromium acceptance workflows passed locally. Final runtime
+retention results and exact scope limits are recorded in the
+[verification report](../development/chapter-assets-verification.md).
+This is not a live deployment or a new CI result. Deferred features remain as
+listed above; in particular, F06 reference viewing depends on F05.

@@ -38,13 +38,16 @@ pub fn ChapterManager(
             .chapter-heading, .chapter-row, .chapter-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
             .chapter-heading { justify-content: space-between; }
             .chapter-heading h2 { margin: 0; }
+            .chapter-manager button, #chapter-delete-dialog button { padding: 10px 14px; border: 1px solid #58604b; border-radius: 3px; background: #263025; color: var(--paper); }
+            .chapter-manager button:hover:not(:disabled), #chapter-delete-dialog button:hover:not(:disabled) { border-color: var(--brass); background: #303c2c; }
+            .chapter-manager button:disabled, #chapter-delete-dialog button:disabled { cursor: not-allowed; opacity: .55; }
             .chapter-list { display: grid; gap: .5rem; padding-left: 1.4rem; }
             .chapter-row button:first-child { flex: 1; text-align: left; min-width: 130px; }
-            .chapter-row button[aria-pressed=true] { border-color: #cbb17a; }
+            .chapter-row button[aria-pressed=true] { border-color: var(--brass); background: #c7ac781a; }
             .chapter-details { display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; margin: 1rem 0; }
             .chapter-details label { display: grid; gap: .4rem; }
             .chapter-details input, .chapter-details textarea { width: 100%; }
-            @media (max-width: 700px) { .chapter-details { grid-template-columns: 1fr; } }
+            @media (max-width: 700px) { .chapter-details { grid-template-columns: 1fr; } .chapter-manager button, #chapter-delete-dialog button { min-height: 44px; } }
         "} }
         section { class: "chapter-manager", "aria-label": "Chapter management",
             div { class: "chapter-heading",

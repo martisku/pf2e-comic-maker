@@ -837,6 +837,16 @@ async fn chapters_assets_and_images_keep_stable_identity() {
     )
     .await
     .unwrap();
+    let mut old_client = saved.clone();
+    old_client.workspace.schema_version = 1;
+    assert_eq!(
+        db::save_project(&state.db, project, old_client)
+            .await
+            .unwrap_err()
+            .0,
+        400
+    );
+    assert_eq!(db::read_project(&state.db, project).await.unwrap(), saved);
     let bytes = picture(image::ImageFormat::Png);
     let mut intent =
         db::Intent::new(Uuid::new_v4(), 1, saved.revision, &bytes, "image/png").unwrap();
