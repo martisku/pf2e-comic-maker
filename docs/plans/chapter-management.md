@@ -1,6 +1,9 @@
 # Implementation plan: Chapter management
 
-Status: Draft
+Status: Approved
+
+Reviewed by the orchestration agent on 2026-10-23; implementation authorized
+by the user’s request for agent planning followed by implementation.
 
 ## Requirement and scope
 
