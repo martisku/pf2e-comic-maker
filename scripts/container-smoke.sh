@@ -40,6 +40,7 @@ docker run -d --name comic-ci "${runtime_config[@]}" comic-runtime:ci
 owns_container=true
 wait_ready
 node scripts/browser-smoke.cjs
+node scripts/chapter-assets-smoke.cjs
 node scripts/project-smoke.cjs
 curl --silent --show-error --fail --user comic:disposable-test-password-only \
     http://127.0.0.1:10000/api/workspace -o "$smoke_tmp_dir/comic-before.json"

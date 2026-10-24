@@ -152,8 +152,8 @@ footer { display: flex; justify-content: space-between; gap: 15px; border-top: 1
   .archive-brand { justify-content: center; gap: 10px; }
   .archive-brand strong { font-size: 14px; }
   .archive-sigil { font-size: 34px; }
-  .archive-sidebar nav { display: flex; gap: 10px; margin-top: 12px; }
-  .archive-nav { justify-content: center; margin: 0; padding: 8px 10px; min-height: 44px; }
+  .archive-sidebar nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+  .archive-nav { justify-content: center; margin: 0; padding: 8px 10px; min-height: 44px; min-width: 0; }
   .archive-project, .archive-motto { display: none; }
   .studio { margin: 0; padding: 0 16px; }
   .topbar { min-height: 58px; gap: 10px; }

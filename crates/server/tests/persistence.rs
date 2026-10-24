@@ -820,3 +820,165 @@ async fn populated_singleton_expands_without_changing_legacy_content() {
     let next = db::finish(&state.db, pending_id).await.unwrap();
     assert_eq!(next.workspace.panels[1].images.len(), 1);
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured disposable PostgreSQL and S3 services"]
+async fn chapters_assets_and_images_keep_stable_identity() {
+    use comic_model::{Asset, AssetKind, ProjectCreate};
+    let (state, _) = fixture().await;
+    let project = Uuid::new_v4();
+    let mut saved = db::create_project(
+        &state.db,
+        ProjectCreate {
+            project_id: project.to_string(),
+            name: "Chapter persistence".into(),
+            description: String::new(),
+        },
+    )
+    .await
+    .unwrap();
+    let mut old_client = saved.clone();
+    old_client.workspace.schema_version = 1;
+    assert_eq!(
+        db::save_project(&state.db, project, old_client)
+            .await
+            .unwrap_err()
+            .0,
+        400
+    );
+    assert_eq!(db::read_project(&state.db, project).await.unwrap(), saved);
+    let bytes = picture(image::ImageFormat::Png);
+    let mut intent =
+        db::Intent::new(Uuid::new_v4(), 1, saved.revision, &bytes, "image/png").unwrap();
+    intent.project_id = project;
+    db::reserve(&state.db, &intent).await.unwrap();
+    saved = db::finish_project(&state.db, project, intent.id)
+        .await
+        .unwrap();
+    let original_images = saved.workspace.panels[0].images.clone();
+    // Retained panels can be reordered without transferring image authority.
+    saved.workspace.panels.reverse();
+    saved = db::save_project(&state.db, project, saved).await.unwrap();
+    let mut forged = saved.clone();
+    forged.workspace.panels[0].images = original_images.clone();
+    forged.workspace.panels[0].selected_image = Some(intent.id.to_string());
+    assert_eq!(
+        db::save_project(&state.db, project, forged)
+            .await
+            .unwrap_err()
+            .0,
+        400
+    );
+    let second = saved.workspace.add_chapter().unwrap();
+    let retained = saved.workspace.add_panel(second).unwrap();
+    let asset_id = Uuid::new_v4().to_string();
+    saved.workspace.assets.push(Asset {
+        id: asset_id.clone(),
+        kind: AssetKind::Character,
+        name: "Wick".into(),
+        description: "Shared character".into(),
+        design_notes: String::new(),
+        character_size: None,
+    });
+    for panel in &mut saved.workspace.panels {
+        if panel.id == 1 || panel.id == retained {
+            panel.assets.characters.push(asset_id.clone());
+        }
+    }
+    saved.workspace.chapter_mut(second).unwrap().title = "Retained chapter".into();
+    saved.workspace.chapter_mut(second).unwrap().description = "Persisted details".into();
+    saved.workspace.move_chapter(second, -1);
+    saved = db::save_project(&state.db, project, saved).await.unwrap();
+    assert_eq!(db::read_project(&state.db, project).await.unwrap(), saved);
+    let mut new_image = saved.clone();
+    new_image
+        .workspace
+        .panels
+        .iter_mut()
+        .find(|p| p.id == retained)
+        .unwrap()
+        .images = original_images.clone();
+    new_image
+        .workspace
+        .panels
+        .iter_mut()
+        .find(|p| p.id == retained)
+        .unwrap()
+        .selected_image = Some(intent.id.to_string());
+    assert_eq!(
+        db::save_project(&state.db, project, new_image)
+            .await
+            .unwrap_err()
+            .0,
+        400
+    );
+    let pending_id = Uuid::new_v4();
+    let mut pending = db::Intent::new(pending_id, 1, saved.revision, &bytes, "image/png").unwrap();
+    pending.project_id = project;
+    db::reserve(&state.db, &pending).await.unwrap();
+    let stale = saved.clone();
+    assert!(saved.workspace.remove_chapter(1));
+    saved = db::save_project(&state.db, project, saved).await.unwrap();
+    assert_eq!(
+        db::finish_project(&state.db, project, pending_id)
+            .await
+            .unwrap_err()
+            .0,
+        409
+    );
+    assert_eq!(
+        db::save_project(&state.db, project, stale)
+            .await
+            .unwrap_err()
+            .0,
+        409
+    );
+    assert_eq!(saved.workspace.assets.len(), 1);
+    assert_eq!(saved.workspace.asset_users(&asset_id).len(), 1);
+    assert_eq!(saved.workspace.panels[0].id, retained);
+    assert!(saved.workspace.add_panel(second).unwrap() > retained);
+    saved = db::save_project(&state.db, project, saved).await.unwrap();
+    let mut dangling = saved.clone();
+    dangling.workspace.assets.clear();
+    assert_eq!(
+        db::save_project(&state.db, project, dangling)
+            .await
+            .unwrap_err()
+            .0,
+        400
+    );
+    assert_eq!(db::read_project(&state.db, project).await.unwrap(), saved);
+
+    // Legacy reads may migrate storage; a missing version on an incoming write
+    // must still be rejected before the first canonical save as well as later.
+    let (origin, server) = serve(state.clone()).await;
+    let client = reqwest::Client::new();
+    for version in [None, Some(99)] {
+        let mut old = serde_json::to_value(&saved).unwrap();
+        if let Some(version) = version {
+            old["workspace"]["schema_version"] = version.into();
+        } else {
+            let workspace = old["workspace"].as_object_mut().unwrap();
+            workspace.remove("schema_version");
+            workspace.remove("chapters");
+            workspace.remove("next_panel_id");
+            workspace.remove("assets");
+            workspace.insert("layout".into(), "Grid".into());
+            workspace.insert("slots".into(), serde_json::json!([null, null, null, null]));
+        }
+        let response = client
+            .put(format!("{origin}/api/projects/{project}"))
+            .basic_auth("comic", Some(PASSWORD))
+            .header("origin", &origin)
+            .json(&old)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status().as_u16(),
+            if version.is_some() { 422 } else { 400 }
+        );
+        assert_eq!(db::read_project(&state.db, project).await.unwrap(), saved);
+    }
+    server.abort();
+}

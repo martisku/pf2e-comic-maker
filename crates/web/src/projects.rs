@@ -573,7 +573,7 @@ pub fn NewProject(mut session: Session) -> Element {
     rsx! {
         main { class: "project-browser",
             h1 { "New project" }
-            p { "Start with one composition page and four blank panels. Chapter and panel creation will follow in a later update." }
+            p { "Start with a chapter, one composition page and four blank panels. Add more chapters and panels as your story grows." }
             form { onsubmit: move |event| {
                 event.prevent_default();
                 if (session.busy)() { return; }

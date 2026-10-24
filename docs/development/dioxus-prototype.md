@@ -1,10 +1,24 @@
 # Dioxus web prototype
 
+## Chapter and asset increment — locally verified, 2026-10-24
+
+Projects now have ordered chapters, each with one editable composition page and
+an expandable panel list. Create, edit, reorder and delete chapters with an
+explicit panel-count confirmation. The Asset library manages shared characters,
+locations and equipment; panel associations resolve to those shared definitions.
+
+Run `comic-server migrate` to apply migration 0003 before starting this server.
+Existing four-panel workspaces are decoded into their first chapter, preserving
+images and placements. Deploy the server and bundled frontend together: older
+browser tabs must reload before saving because old-format writes are rejected.
+There is no live deployment as part of this increment. Full multi-page editing,
+visual references and backup/restore remain separate work.
+
 ## F01 project-management increment — verified in CI, 2026-10-23
 
 The new implementation adds a Projects list, project creation, editable project
-descriptions and independent workspaces with guarded navigation. Projects have
-one composition page and four panels for now. The original workspace remains
+descriptions and independent workspaces with guarded navigation. That increment initially supplied
+one composition page and four panels; chapter management extends it above. The original workspace remains
 accessible at the initial route; project deep links use `?project=<uuid>` and
 the project list uses `?view=projects`.
 
@@ -34,7 +48,9 @@ first milestone or mark its acceptance criteria complete.
 
 - Dioxus 0.7.10 browser UI compiled to WebAssembly.
 - Native Rust/Axum server, shared Rust data structures, and SQLx/PostgreSQL storage and private S3-compatible image objects.
-- One sample workspace with four independently editable panels.
+- A sample workspace starting with four independently editable panels; chapters
+  and additional panels can be created.
+- A searchable asset library and shared character/location/equipment associations.
 - Automatic saving, visible outcomes, retry after failures, and revision checks
   that reject stale writes from another browser session.
 - Full-page, 2×2, and wide-above-two page layouts. Panels removed from slots stay

@@ -1,0 +1,19 @@
+.asset-library { padding: 24px; }
+.asset-library button { padding: 10px 14px; border: 1px solid #58604b; border-radius: 3px; background: #263025; color: var(--paper); }
+.asset-library button:hover:not(:disabled) { border-color: var(--brass); background: #303c2c; }
+.asset-library button:disabled { cursor: not-allowed; opacity: .55; }
+.asset-library select { padding: 10px; border: 1px solid #47513e; border-radius: 3px; background: #151d18; color: #e9e7d9; max-width: 100%; }
+.asset-library-toolbar { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; margin: 20px 0; }
+.asset-library label, .asset-details label { display: grid; gap: 6px; margin-bottom: 12px; }
+.asset-library-columns { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 3fr); gap: 24px; }
+.asset-records { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+.asset-records button { text-align: left; overflow-wrap: anywhere; }
+.asset-records button[aria-pressed="true"] { border-color: var(--brass); background: #c7ac781a; color: var(--paper); }
+.asset-details { min-width: 0; }
+.asset-details input, .asset-details textarea { width: 100%; }
+.asset-usage, .shared-asset-definition { padding: 12px; border: 1px solid #a58a5f66; margin: 12px 0; overflow-wrap: anywhere; }
+.panel-assets fieldset { border: 1px solid #a58a5f66; margin: 12px 0; min-width: 0; }
+.panel-assets .asset-checkbox { display: flex; align-items: center; gap: 8px; }
+.panel-assets .asset-checkbox input { width: auto; }
+.shared-asset-definition p { white-space: pre-wrap; }
+@media (max-width: 700px) { .asset-library-columns { grid-template-columns: 1fr; } .asset-library { padding: 16px; } .asset-library button, .asset-library select { min-height: 44px; } .asset-library select { font-size: 16px; } }

@@ -85,11 +85,15 @@ struct ProjectRow {
 }
 impl ProjectRow {
     fn snapshot(self) -> ProjectSnapshot {
+        // Only stored reads may upgrade a legacy document. Incoming HTTP data
+        // retains its version and is rejected by Workspace::validate.
+        let mut workspace = self.data.0;
+        workspace.schema_version = comic_model::WORKSPACE_SCHEMA_VERSION;
         ProjectSnapshot {
             project_id: self.project_id.to_string(),
             description: self.description,
             revision: self.revision as u64,
-            workspace: self.data.0,
+            workspace,
         }
     }
 }
@@ -206,14 +210,18 @@ async fn save_inner(
     if request.revision != current.revision {
         return Err(conflict());
     }
-    for (next, previous) in request
-        .workspace
-        .panels
-        .iter()
-        .zip(&current.workspace.panels)
-    {
-        if next.images != previous.images {
-            return Err(invalid("Image records cannot be changed through an edit."));
+    if request.workspace.next_panel_id < current.workspace.next_panel_id {
+        return Err(invalid("Panel identity counters cannot move backwards."));
+    }
+    for next in &request.workspace.panels {
+        if let Some(previous) = current.workspace.panels.iter().find(|p| p.id == next.id) {
+            if next.images != previous.images {
+                return Err(invalid("Image records cannot be changed through an edit."));
+            }
+        } else if next.id < current.workspace.next_panel_id || !next.images.is_empty() {
+            return Err(invalid(
+                "New panels require a new identity and no image records.",
+            ));
         }
     }
     if legacy {
