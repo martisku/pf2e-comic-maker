@@ -13,7 +13,7 @@ for the startup checklist, code map, verification paths and implementation pitfa
 Read [feature status](docs/feature-status.md) before choosing the next feature.
 Read only the documentation relevant to the task:
 
-- Product direction: `docs/product/vision.md`
+- Product direction: root `README.md` (the product vision lives there)
 - Development workflow: `docs/development/workflow.md`
 - Feature requirements: `docs/requirements/`
 - Implementation plans: `docs/plans/`
@@ -116,3 +116,9 @@ Important long-term decisions should be recorded under `docs/decisions/`.
 The repository is the source of truth for the project.
 
 Do not assume information from previous conversations or external context unless it has been added to the repository.
+
+## Backup and restore work
+
+Treat imported archives as untrusted data. Preserve existing projects and publish
+restored copies only after full validation and durable image storage. Keep archive
+limits, format compatibility and retry/failure behavior documented and tested.

@@ -26,15 +26,13 @@ there instead of maintaining a second, divergent Codex-specific rule file.
 
 ## Current baseline
 
-F01 project management was merged in [PR #4](https://github.com/martisku/pf2e-comic-maker/pull/4)
-on 2026-10-23. It includes independent projects, names/descriptions, guarded
-autosave/navigation and isolated image/revision storage. Each project still has
-one composition page and exactly four panels. F01 remains **Partial** against
-the complete milestone; see the feature-status table for dependent criteria.
-The next proposed work is to **plan F02 chapter management and F04 assets in
-parallel**, agreeing shared contracts before implementation. See
-[parallel delivery](parallel-feature-delivery.md). Approved requirements do not
-authorize implementation of missing plans.
+The baseline includes independent projects, chapter management, shared assets,
+full panel planning, multiple pages and visual references (PRs #4, #7 and #8).
+Project documents use schema v3; old stored documents migrate on reading while
+old-format writes are rejected. Panel and reference uploads have separate durable
+catalogs. F07 backup/restore is the current implementation task; see its
+[requirement](../requirements/project-backup.md) and the feature-status table.
+Do not start from earlier feature branches after a squash merge.
 
 The public service URL is <https://pf2e-comic-maker.onrender.com>.
 Repository verification, a merged PR and a live deployment are separate facts.
