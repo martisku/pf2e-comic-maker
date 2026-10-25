@@ -879,6 +879,7 @@ async fn chapters_assets_and_images_keep_stable_identity() {
         description: "Shared character".into(),
         design_notes: String::new(),
         character_size: None,
+        reference_images: vec![],
     });
     for panel in &mut saved.workspace.panels {
         if panel.id == 1 || panel.id == retained {
@@ -1028,6 +1029,14 @@ async fn stored_v2_upgrades_but_old_clients_cannot_drop_v3_fields() {
     for version in [1, 2] {
         let mut old = serde_json::to_value(&canonical).unwrap();
         old["workspace"]["schema_version"] = version.into();
+        if version == 1 {
+            let workspace = old["workspace"].as_object_mut().unwrap();
+            workspace.remove("chapters");
+            workspace.remove("next_panel_id");
+            workspace.remove("assets");
+            workspace.insert("layout".into(), "Grid".into());
+            workspace.insert("slots".into(), serde_json::json!([1, 2, 3, 4]));
+        }
         let response = client
             .put(format!("{origin}/api/projects/{project}"))
             .basic_auth("comic", Some(PASSWORD))

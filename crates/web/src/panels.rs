@@ -79,7 +79,7 @@ pub fn PageManager(
                 }
             }
             if let Some(page) = active {
-                { let id = page.id; rsx! { label { "Layout"
+                { let id = page.id; rsx! { label { key: "{id}:{page.layout.css_class()}:{pending().is_some()}", "Layout"
                     select { disabled: blocked, value: page.layout.css_class(), "aria-label": "Page layout", oninput: move |event| {
                         if (session.busy)() || (session.uncertain)() { return; }
                         let layout = match event.value().as_str() { "full" => Layout::Full, "wide" => Layout::Wide, _ => Layout::Grid };
@@ -87,7 +87,7 @@ pub fn PageManager(
                             if page.slots.iter().skip(layout.capacity()).any(Option::is_some) { pending.set(Some(Confirmation::Layout(id, layout))); } else { page.change_layout(layout); session.dirty.set(true); }
                         }
                     },
-                        option { value: "grid", "2 × 2 grid" } option { value: "wide", "Wide + two" } option { value: "full", "Full page" }
+                        option { value: "grid", selected: page.layout == Layout::Grid, "2 × 2 grid" } option { value: "wide", selected: page.layout == Layout::Wide, "Wide + two" } option { value: "full", selected: page.layout == Layout::Full, "Full page" }
                     }
                 } } }
             }

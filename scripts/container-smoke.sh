@@ -41,6 +41,7 @@ owns_container=true
 wait_ready
 node scripts/browser-smoke.cjs
 node scripts/chapter-assets-smoke.cjs
+node scripts/panels-references-smoke.cjs
 node scripts/project-smoke.cjs
 curl --silent --show-error --fail --user comic:disposable-test-password-only \
     http://127.0.0.1:10000/api/workspace -o "$smoke_tmp_dir/comic-before.json"
@@ -60,4 +61,5 @@ curl --silent --show-error --fail --user comic:disposable-test-password-only \
 cmp "$smoke_tmp_dir/comic-before.json" "$smoke_tmp_dir/comic-after.json"
 cmp "$smoke_tmp_dir/comic-image-before" "$smoke_tmp_dir/comic-image-after"
 node scripts/project-smoke.cjs --verify-retention
+node scripts/panels-references-smoke.cjs --verify-retention
 echo 'PASS: fresh container retains workspace, revisions, and original image bytes.'

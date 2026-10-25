@@ -93,3 +93,23 @@ Two small clarifications were sent to the owners before implementation:
 No further architectural blocker was identified. This is a plan review, not a
 claim that implementation, migrations, tests, backup restoration or deployment
 have succeeded.
+
+## Implementation read-through
+
+Reviewed the initial integrated model v3 decoder/read boundary, panel lifecycle
+helpers, page selection/numbering, reference catalog migration, routes, upload
+reservation/finalization, save membership guard and cleanup paths. No concrete
+storage/schema/lifecycle defect was identified in this read-through. The page
+manager is keyed by project and chapter, preventing confirmation state from
+retargeting another chapter. Reference save validation checks each retained
+image ID/URL against the same current asset; finalization rechecks current asset,
+revision and count while holding the project lock. Ready reference intents are
+excluded from abandonment/reconciliation deletion.
+
+A concrete accessibility issue in the initial larger-image overlay was reported:
+`aria-modal` alone did not contain keyboard focus or make background controls
+inert. The owner replaced it with a native modal dialog; the corrected code was
+read. New persistence coverage includes asset deletion between reservation and
+finalization and late storage writes after cleanup. These are code/test reviews,
+not test execution results. Root coordinates actual build, persistence, browser
+and retention verification.
