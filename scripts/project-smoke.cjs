@@ -297,6 +297,15 @@ async function browserWorkflow() {
         }
       }
     }
+    for (const project of projectsBefore) {
+      for (const asset of project.workspace.assets) {
+        for (const reference of asset.reference_images) {
+          const response = await context.request.get(`${baseURL}${reference.url}`);
+          assert(response.ok());
+          images.push({ url: reference.url, digest: digest(await response.body()) });
+        }
+      }
+    }
     fs.writeFileSync(artifact, JSON.stringify({ list, projects: projectsBefore, images }, null, 2));
     assert.deepEqual(errors, [], 'Browser runtime errors');
     console.log('PASS: create/reopen, metadata autosave, separate project images, unsaved cancel/save/discard, delayed save, history guard, unload warning, phone controls and invalid project recovery');

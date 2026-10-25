@@ -317,15 +317,14 @@ Significant technical decisions should be recorded under:
 
 ## Project status
 
-The illustrated workspace and project persistence are in place. The next
-increment adds chapter creation, editing, ordering and confirmed deletion, panel
-creation and expression text, plus a searchable library of characters, locations
-and equipment that panels can share. Each chapter currently has one composition
-page. This increment passed local build, integration, browser and fresh-container
-retention verification on `feature/chapters-and-assets`; it has not been deployed.
+Projects now support chapter-owned panels and multiple composition pages, full
+planning fields, panel moves, confirmed panel/page deletion, and layout-derived
+reading order. The shared character/location/equipment library supports labeled
+PNG/JPEG/WebP reference images, thumbnail/larger views, and access from associated
+panels. Existing images and identities are preserved through these operations.
 
-Visual references, complete panel/page management and backup/restore remain.
-See the [feature status and delivery order](docs/feature-status.md),
-[chapter implementation plan](docs/plans/chapter-management.md),
-[asset implementation plan](docs/plans/asset-library.md), and
-[parallel delivery review](docs/plans/parallel-delivery-review.md).
+The panel/page and reference increment is on `feature/panels-pages-and-references`.
+See [feature status](docs/feature-status.md), [verification](docs/development/panels-references-verification.md),
+[panel/page plan](docs/plans/panel-page-management.md), and
+[reference plan](docs/plans/visual-references.md). Backup/restore (F07) remains;
+this increment does not claim live deployment or complete milestone verification.

@@ -1,5 +1,17 @@
 # Current architecture
 
+The panel/page and visual-reference increment adds complete panel planning fields,
+chapter moves, confirmed panel/page removal, multiple pages and derived reading
+order. Assets own labeled reference images exposed in their library and associated
+panels. Schema v3 reads existing v1/v2 storage while rejecting old-format writes.
+Migration 0004 adds a separate reference upload catalog using the established
+revision, idempotency and reconciliation safeguards. See
+[decision 0004](../decisions/0004-panel-pages-and-reference-storage.md) and the
+[panel/page](../plans/panel-page-management.md) and
+[reference](../plans/visual-references.md) plans. See [verification](../development/panels-references-verification.md);
+no live deployment is implied. Backup/restore remains F07.
+
+
 The chapter/library increment adds ordered chapters with one editable composition
 page each, variable panel creation, expression text, and a shared library of
 characters, locations and equipment with panel associations. Implementation passed local build, browser and fresh-container retention

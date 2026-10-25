@@ -182,7 +182,7 @@ fn App() -> Element {
             } else if session.invalid() {
                 div { class: "loading", "Choose Projects to open your saved work." }
             } else if let Some(workspace) = workspace {
-                fieldset { class: "workspace-fields", disabled: session.loading() || busy() || (session.uncertain)(),
+                fieldset { class: "workspace-fields", disabled: session.loading() || (session.uncertain)(),
 
                 section { class: "project-heading",
                     div { p { class: "eyebrow", "YOUR ILLUSTRATED STORY" }

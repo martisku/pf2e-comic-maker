@@ -18,7 +18,7 @@ let png;
     for (let i = 0; i < 100; i++) { const s = await read(id); if (predicate(s.workspace)) { await saved(); return s; } await page.waitForTimeout(100); }
     throw Error('Timed out waiting for panel/page/reference persistence');
   };
-  const view = name => page.getByRole('navigation', { name: 'Workspace views' }).getByRole('button', { name, exact: true }).click();
+  const view = name => page.getByRole('navigation', { name: 'Workspace views' }).getByRole('button', { name }).click();
   const selectPanel = title => page.getByRole('navigation', { name: 'Chapter panels' }).getByRole('button').filter({ hasText: title }).click();
   const confirm = () => page.getByRole('dialog', { name: 'Panel and page confirmation' }).getByRole('button', { name: 'Confirm', exact: true }).click();
   const cancel = () => page.getByRole('dialog', { name: 'Panel and page confirmation' }).getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -35,6 +35,7 @@ let png;
         assert(response.ok(), `Retained original ${url}`);
         assert.equal(createHash('sha256').update(await response.body()).digest('hex'), before.referenceDigest);
       }
+      for (const item of before.retainedReferences || []) { const response = await context.request.get(`${baseURL}${item.url}`); assert(response.ok()); assert.equal(createHash('sha256').update(await response.body()).digest('hex'), item.digest); }
       console.log('PASS: fresh runtime retains v3 pages/planning/assets and removed reference/panel original bytes');
       return;
     }
@@ -121,14 +122,42 @@ let png;
     assert.equal((await read(id)).workspace.assets[0].reference_images.length, 1);
     await button('Remove reference').click(); await button('Confirm remove reference').click();
     await waitData(id, w => w.assets[0].reference_images.length === 0);
+    // Both server decoder failures and client size rejection leave existing state intact.
+    const importReference = page.getByLabel('Import reference image', { exact: true });
+    for (const file of [
+      { name: 'corrupt.png', mimeType: 'image/png', buffer: Buffer.from('broken image') },
+      { name: 'unsupported.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') },
+      { name: 'oversized.png', mimeType: 'image/png', buffer: Buffer.alloc(20_000_001) },
+    ]) {
+      await importReference.setInputFiles(file);
+      await page.waitForFunction(() => document.querySelector('[role=status]')?.textContent.trim() === 'Upload failed');
+      await page.getByRole('alert').waitFor();
+      assert.equal((await read(id)).workspace.assets[0].reference_images.length, 0);
+      await page.reload(); await saved(); await view('Asset library'); await button('Bridge keeper').click();
+    }
+    const retainedReferences = [];
+    for (const [mime, extension] of [['image/png', 'png'], ['image/jpeg', 'jpg'], ['image/webp', 'webp']]) {
+      const bytes = Buffer.from(await page.evaluate(mime => { const c = document.createElement('canvas'); c.width = 20; c.height = 20; const ctx = c.getContext('2d'); ctx.fillStyle = '#735846'; ctx.fillRect(0, 0, 20, 20); return c.toDataURL(mime).split(',')[1]; }, mime), 'base64');
+      await importReference.setInputFiles({ name: `retained.${extension}`, mimeType: mime, buffer: bytes });
+      const current = await waitData(id, w => w.assets[0].reference_images.length === retainedReferences.length + 1);
+      const reference = current.workspace.assets[0].reference_images.at(-1);
+      const result = await context.request.get(`${baseURL}${reference.url}`); assert(result.ok()); assert.deepEqual(await result.body(), bytes);
+      retainedReferences.push({ url: reference.url, digest: createHash('sha256').update(bytes).digest('hex') });
+    }
+    await page.getByLabel('Reference label', { exact: true }).first().fill('Retained keeper');
+    await page.getByLabel('Reference description', { exact: true }).first().fill('Retained across fresh runtime');
+    await waitData(id, w => w.assets[0].reference_images[0].description === 'Retained across fresh runtime');
+    await page.reload(); await saved(); await view('Asset library'); await button('Bridge keeper').click();
+    assert.equal(await page.getByLabel('Reference label', { exact: true }).first().inputValue(), 'Retained keeper');
+    assert.equal(await page.getByLabel('Reference description', { exact: true }).first().inputValue(), 'Retained across fresh runtime');
     await page.setViewportSize({ width: 390, height: 844 });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Phone reference gallery overflows');
     fs.mkdirSync('artifacts', { recursive: true }); await page.screenshot({ path: 'artifacts/panels-references-phone.png', fullPage: true });
-    await view('Page composition');
+    await view('Page composition'); await button('Open chapter Destination').click();
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Phone panel/page controls overflow');
     await button('New page').click(); await waitData(id, w => w.chapters.find(c => c.id === destination).pages.length === 1);
     const final = await read(id);
-    fs.writeFileSync('artifacts/panels-references-retention.json', JSON.stringify({ snapshot: final, referenceURL, referenceDigest, originalImages: originalPanel.images, source }, null, 2));
+    fs.writeFileSync('artifacts/panels-references-retention.json', JSON.stringify({ snapshot: final, referenceURL, referenceDigest, originalImages: originalPanel.images, retainedReferences, source }, null, 2));
     assert.deepEqual(errors, [], 'Browser runtime errors');
     console.log('PASS: planning fields, alternative images, shared references/larger views, panel move/delete/cancel, page creation/reorder/removal/cancel/zero pages, reload and phone controls');
   } catch (error) {

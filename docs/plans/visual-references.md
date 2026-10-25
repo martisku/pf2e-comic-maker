@@ -1,6 +1,6 @@
 # Implementation plan: Visual references
 
-Status: Approved (2026-10-25; root review and implementation authorization)
+Status: Implemented (2026-10-25; root review and implementation authorization)
 
 ## Requirement and selected scope
 
@@ -134,3 +134,8 @@ reload of older tabs. Backup verification remains an explicit deferred limitatio
 
 None requiring product decisions. The proposed per-asset limit and original-image
 thumbnail strategy are reviewable implementation choices.
+
+## Verification
+
+See the [local verification report](../development/panels-references-verification.md)
+for executed checks and limits. F07 backup/restore remains deferred; no live deployment is claimed.

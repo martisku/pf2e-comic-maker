@@ -94,15 +94,16 @@ fs.mkdirSync(output, { recursive: true });
     await saved();
 
     for (let id = 1; id <= 4; id++) {
+      const initialImageCount = (await read()).workspace.panels[id - 1].images.length;
       await page.locator('.panel-card').nth(id - 1).click();
       await editor.locator('input[type=file]').setInputFiles({ name: `panel-${id}.png`, mimeType: 'image/png', buffer: png });
-      await waitForData(s => s.workspace.panels[id - 1].images.length === 1);
+      await waitForData(s => s.workspace.panels[id - 1].images.length === initialImageCount + 1);
       await saved();
     }
     const beforeReplacement = await read();
     await page.locator('.panel-card').nth(2).click();
     await editor.locator('input[type=file]').setInputFiles({ name: 'replacement.png', mimeType: 'image/png', buffer: png });
-    const afterReplacement = await waitForData(s => s.workspace.panels[2].images.length === 2);
+    const afterReplacement = await waitForData(s => s.workspace.panels[2].images.length === beforeReplacement.workspace.panels[2].images.length + 1);
     for (const index of [0, 1, 3]) {
       assert.deepEqual(afterReplacement.workspace.panels[index], beforeReplacement.workspace.panels[index]);
     }
@@ -140,6 +141,7 @@ fs.mkdirSync(output, { recursive: true });
     await page.getByRole('combobox', { name: 'Page layout' }).selectOption('grid');
     await waitForData(s => s.workspace.chapters[0].pages[0].layout === 'Grid');
     for (let id = 2; id <= 4; id++) {
+      const initialImageCount = (await read()).workspace.panels[id - 1].images.length;
       await page.locator('.panel-card').nth(id - 1).click();
       await editor.getByLabel('Panel placement').selectOption(`1:${id - 1}`);
       await waitForData(s => s.workspace.chapters[0].pages[0].slots[id - 1] === id);

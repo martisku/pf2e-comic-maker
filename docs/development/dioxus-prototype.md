@@ -1,5 +1,15 @@
 # Dioxus web prototype
 
+## Panel/page and reference increment
+
+Apply migrations with `comic-server migrate` before starting the updated server;
+migration 0004 adds the asset-reference upload catalog. Ship server and frontend
+together. Schema v3 reads earlier stored workspaces, while older browser tabs
+must reload before saving. Projects support multiple pages, panel moves and
+complete planning fields, plus labeled visual references on shared assets.
+See [verification](panels-references-verification.md). Backup/restore remains F07.
+
+
 ## Chapter and asset increment — locally verified, 2026-10-24
 
 Projects now have ordered chapters, each with one editable composition page and

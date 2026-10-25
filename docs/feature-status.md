@@ -1,6 +1,6 @@
 # Feature status and delivery order
 
-Last reviewed: **2026-10-24**. F01 project-management verification passed for
+Last reviewed: **2026-10-25**. F01 project-management verification passed for
 commit `d1f4402` in [GitHub Actions](https://github.com/martisku/pf2e-comic-maker/actions/runs/39986565839).
 
 This is the working overview of planned and implemented product features.
@@ -21,6 +21,16 @@ Requirement approval, implementation-plan approval, code completion, and
 verification are separate states. An approved requirement does not mean that
 the feature is implemented or that its implementation plan is approved.
 
+## Latest parallel increment
+
+F03/F19 panel/page lifecycle and F05 visual references (including F06 reference
+access) are implemented on `feature/panels-pages-and-references`. See the
+[verification report](development/panels-references-verification.md),
+[panel/page plan](plans/panel-page-management.md), and
+[reference plan](plans/visual-references.md). F07 backup/restore remains deferred,
+including all dependent acceptance criteria. Historical verification below refers
+to earlier increments unless explicitly updated.
+
 ## Current parallel delivery
 
 The [chapter plan](plans/chapter-management.md) and
@@ -33,7 +43,7 @@ See [the dependency and ownership review](plans/parallel-delivery-review.md).
 
 ## First milestone
 
-**10 feature areas: 6 partial, 2 not started, 2 implemented for the delivered
+**10 feature areas: 6 partial, 1 not started, 3 implemented for the delivered
 chapter/library scope.** F10 and F11 include only the selected image
 import, replacement, alternatives, and selection scope.
 
@@ -41,18 +51,18 @@ import, replacement, alternatives, and selection scope.
 | --- | --- | --- | --- | --- | --- |
 | [F01 Project workspace and persistence](requirements/project-workspace.md) | Approved | [Project-management increment: Implemented](plans/project-workspace.md); prototype storage plan implemented | Partial | Create/open/switch independent projects, edit names/descriptions, autosave with save/failure status and guarded navigation; isolated images/revisions and restart retention verified in CI. | Persist and verify the complete milestone model as chapters, assets, references and backup/restore are added. |
 | [F02 Chapter management](requirements/chapter-management.md) | Approved | [Implemented](plans/chapter-management.md) | Implemented | Create/edit/order/open chapters; exact panel-count deletion confirmation, cancellation and retention verified locally. Shared library and other chapters remain intact. | Reference-image preservation will also be exercised when F05 exists. |
-| [F03 Panel planning](requirements/panel-planning.md) | Approved | [Chapter increment implemented](plans/chapter-management.md); full plan pending | Partial | Chapter-owned variable panel creation, title/action/dialogue/expression, blank drafts, placement and unplaced state. | Individual panel deletion/moves, framing/composition, mood, production notes and reading order across pages. |
+| [F03 Panel planning](requirements/panel-planning.md) | Approved | [Implemented increment](plans/panel-page-management.md) | Partial | Full planning fields, blank drafts, chapter moves with preserved images/associations, confirmed deletion and layout-derived reading order. | Backup/restore verification through F07. |
 | [F04 Reusable asset library](requirements/asset-library.md) | Approved | [Implemented](plans/asset-library.md) | Implemented | Characters, locations/equipment, names/descriptions/design notes, optional size, type browsing/search, shared identities and guarded deletion; persistence and browser flows verified locally. | No remaining F04 scope; reference images are F05. |
-| [F05 Visual references](requirements/visual-references.md) | Approved | Missing | Not started | Panel image upload infrastructure exists, but asset references do not. | Multiple labeled/described images per asset, thumbnails/larger view, validated import, confirmed removal, retention and backup restoration. |
-| [F06 Panel–asset associations](requirements/panel-asset-associations.md) | Approved | [Structured associations implemented](plans/asset-library.md) | Partial | Multiple characters/equipment and one optional location, live shared definitions, independently removable associations, action/expression context and same-project validation. | Associated reference-image viewing depends on F05. |
+| [F05 Visual references](requirements/visual-references.md) | Approved | [Implemented increment](plans/visual-references.md) | Partial | Multiple labeled/described PNG/JPEG/WebP originals, thumbnail/larger views, validated import, confirmed removal and reopening. | Backup/restore verification through F07. |
+| [F06 Panel–asset associations](requirements/panel-asset-associations.md) | Approved | [Implemented](plans/visual-references.md) | Implemented | Shared characters/equipment and optional location, independently removable associations, shared definitions and reference images from panels. | No remaining selected F06 scope. |
 | [F07 Project backup and restoration](requirements/project-backup.md) | Approved | Missing | Not started | Durable server storage exists; browser project export/restore does not. | Self-contained versioned backup with all data and images; validated restoration into an independent project copy; reject invalid archives without affecting existing work. |
 | [F10 Panel image import](requirements/panel-images.md) | Approved, selected scope | Full feature plan missing; prototype storage plan implemented | Partial | PNG/JPEG/WebP imports up to 20,000,000 bytes, project-owned originals, validation and independent replacement. | Project/chapter/asset integration and complete project backup/restore coverage. Generation provenance is future scope. |
 | [F11 Image alternatives and selection](requirements/panel-images.md) | Approved, selected scope | Missing | Partial | Retained image alternatives, visual/dropdown selection and return to an earlier image; server persistence. | Complete project backup/restore and integration with the full panel lifecycle. Formal feedback, comparison and approval are future scope. |
-| [F19 Page layouts](requirements/page-layouts.md) | Approved | [Chapter foundation implemented](plans/chapter-management.md); full plan pending | Partial | One page per chapter; full-page, 2×2 and wide-above-two templates; placement/unplaced panels, contain/fill and crop position. | Multiple-page creation/reordering/confirmed removal, reading order across pages, full backup/restore. |
+| [F19 Page layouts](requirements/page-layouts.md) | Approved | [Implemented increment](plans/panel-page-management.md) | Partial | Multiple chapter-owned pages, creation/reordering/confirmed removal, all templates, cross-page placement, derived numbers, fitting and preserved unplaced panels. | Backup/restore verification through F07. |
 
 Projects start with four blank panels in their first chapter. Users can create
-additional chapters and panels; each chapter currently exposes one composition
-page. This does not yet implement the complete panel/page lifecycle.
+additional chapters and panels; each chapter supports multiple composition
+pages. Removing the last page preserves editable, unplaced panels.
 
 ## Future scope
 
@@ -119,7 +129,7 @@ own implementation plans; the order below reflects current dependencies.
 
 For each delivery step, create a focused plan under `docs/plans/`, review and
 approve it using the [development workflow](development/workflow.md), then
-implement and verify. The [F01 project-management increment](plans/project-workspace.md) is implemented and verified in CI. F02 and F04/structured F06 are now locally verified. Next, **F03/F19 complete panel/page management** and **F05 visual references** can be planned in parallel with coordinated model changes; F01's complete milestone persistence criterion remains open.
+implement and verify. The [F01 project-management increment](plans/project-workspace.md) is implemented and verified in CI. F02 and F04/structured F06 are now locally verified. F03/F19 and F05/F06 increments are now implemented; **F07 backup and restoration** is the next planning task; F01's complete milestone persistence criterion remains open.
 
 ## Parallel delivery recommendation
 
