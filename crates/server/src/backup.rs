@@ -363,7 +363,7 @@ pub(crate) async fn export(
             }
             let end = (offset + 64 * 1024).min(bytes.len());
             Some((
-                Ok::<_, std::convert::Infallible>(bytes.slice(offset..end)),
+                Ok::<_, std::convert::Infallible>(Bytes::copy_from_slice(&bytes[offset..end])),
                 (bytes, end, permit),
             ))
         },
@@ -610,21 +610,48 @@ mod tests {
     use super::*;
     fn fixture() -> Archive {
         let mut output = std::io::Cursor::new(Vec::new());
-        image::DynamicImage::new_rgb8(2, 2).write_to(&mut output, image::ImageFormat::Png).unwrap();
+        image::DynamicImage::new_rgb8(2, 2)
+            .write_to(&mut output, image::ImageFormat::Png)
+            .unwrap();
         let bytes = Bytes::from(output.into_inner());
-        let mut project = ProjectSnapshot { project_id: Uuid::new_v4().to_string(), description: "Backup test".into(), revision: 9, workspace: comic_model::Workspace::default() };
+        let mut project = ProjectSnapshot {
+            project_id: Uuid::new_v4().to_string(),
+            description: "Backup test".into(),
+            revision: 9,
+            workspace: comic_model::Workspace::default(),
+        };
         let id = Uuid::new_v4().to_string();
         let owner = project.workspace.panels[0].id.to_string();
-        project.workspace.panels[0].images.push(comic_model::PanelImage { id: id.clone(), url: image_url("panel", &id, "image/png").unwrap() });
+        project.workspace.panels[0]
+            .images
+            .push(comic_model::PanelImage {
+                id: id.clone(),
+                url: image_url("panel", &id, "image/png").unwrap(),
+            });
         project.workspace.panels[0].selected_image = Some(id.clone());
-        Archive { project, entries: vec![Entry {kind: "panel".into(), id, owner, mime: "image/png".into(), size: bytes.len(), digest: storage::digest(&bytes)}], images: vec![bytes] }
+        Archive {
+            project,
+            entries: vec![Entry {
+                kind: "panel".into(),
+                id,
+                owner,
+                mime: "image/png".into(),
+                size: bytes.len(),
+                digest: storage::digest(&bytes),
+            }],
+            images: vec![bytes],
+        }
     }
     fn changed_manifest(bytes: &[u8], change: impl FnOnce(&mut Value)) -> Bytes {
         let length = u32::from_be_bytes(bytes[8..12].try_into().unwrap()) as usize;
         let mut value: Value = serde_json::from_slice(&bytes[12..12 + length]).unwrap();
         change(&mut value);
         let json = serde_json::to_vec(&value).unwrap();
-        let mut result = MAGIC.to_vec(); result.extend_from_slice(&(json.len() as u32).to_be_bytes()); result.extend_from_slice(&json); result.extend_from_slice(&bytes[12 + length..]); result.into()
+        let mut result = MAGIC.to_vec();
+        result.extend_from_slice(&(json.len() as u32).to_be_bytes());
+        result.extend_from_slice(&json);
+        result.extend_from_slice(&bytes[12 + length..]);
+        result.into()
     }
     #[test]
     fn complete_roundtrip_and_isolated_remap() {
@@ -632,43 +659,152 @@ mod tests {
         let mut restored = parse(encode(&original).unwrap().into()).unwrap();
         assert_eq!(restored.project, original.project);
         assert_eq!(restored.images, original.images);
-        let target = Uuid::new_v4(); let keys = remap(&mut restored, target).unwrap();
+        let target = Uuid::new_v4();
+        let keys = remap(&mut restored, target).unwrap();
         assert_eq!(restored.project.project_id, target.to_string());
         assert_eq!(restored.project.revision, 0);
         assert_ne!(restored.entries[0].id, original.entries[0].id);
         assert_ne!(keys[0], format!("images/{}", original.entries[0].id));
-        assert_eq!(restored.project.workspace.panels[0].selected_image.as_deref(), Some(restored.entries[0].id.as_str()));
+        assert_eq!(
+            restored.project.workspace.panels[0]
+                .selected_image
+                .as_deref(),
+            Some(restored.entries[0].id.as_str())
+        );
+    }
+    #[test]
+    fn shared_assets_references_alternatives_and_layout_survive_remapping() {
+        let mut archive = fixture();
+        let asset_id = Uuid::new_v4().to_string();
+        let reference_id = Uuid::new_v4().to_string();
+        let alternative_id = Uuid::new_v4().to_string();
+        let bytes = archive.images[0].clone();
+        archive.project.workspace.assets.push(comic_model::Asset {
+            id: asset_id.clone(),
+            kind: comic_model::AssetKind::Character,
+            name: "Shared hero".into(),
+            description: "Biography".into(),
+            design_notes: "Cloak".into(),
+            character_size: Some("Small".into()),
+            reference_images: vec![comic_model::AssetReference {
+                id: reference_id.clone(),
+                url: image_url("reference", &reference_id, "image/png").unwrap(),
+                label: "Costume".into(),
+                description: "A reference".into(),
+            }],
+        });
+        for panel in archive.project.workspace.panels.iter_mut().take(2) {
+            panel.assets.characters.push(asset_id.clone());
+        }
+        let panel = &mut archive.project.workspace.panels[0];
+        panel.fill = true;
+        panel.crop_x = 23;
+        panel.crop_y = 84;
+        panel.images.push(comic_model::PanelImage {
+            id: alternative_id.clone(),
+            url: image_url("panel", &alternative_id, "image/png").unwrap(),
+        });
+        archive.entries.push(Entry {
+            kind: "reference".into(),
+            id: reference_id.clone(),
+            owner: asset_id.clone(),
+            mime: "image/png".into(),
+            size: bytes.len(),
+            digest: storage::digest(&bytes),
+        });
+        archive.entries.push(Entry {
+            kind: "panel".into(),
+            id: alternative_id,
+            owner: panel.id.to_string(),
+            mime: "image/png".into(),
+            size: bytes.len(),
+            digest: storage::digest(&bytes),
+        });
+        archive.images.extend([bytes.clone(), bytes]);
+        let mut restored = parse(encode(&archive).unwrap().into()).unwrap();
+        assert_eq!(restored.project, archive.project);
+        remap(&mut restored, Uuid::new_v4()).unwrap();
+        let asset = &restored.project.workspace.assets[0];
+        assert_ne!(asset.id, asset_id);
+        assert_ne!(asset.reference_images[0].id, reference_id);
+        for panel in restored.project.workspace.panels.iter().take(2) {
+            assert_eq!(panel.assets.characters, vec![asset.id.clone()]);
+        }
+        assert_eq!(restored.entries[1].owner, asset.id);
+        assert_eq!(
+            restored.project.workspace.chapters,
+            archive.project.workspace.chapters
+        );
+        assert_eq!(restored.project.workspace.panels[0].images.len(), 2);
+        assert_eq!(restored.project.workspace.panels[0].crop_x, 23);
+        assert_eq!(restored.project.workspace.panels[0].crop_y, 84);
     }
     #[test]
     fn strict_versions_nested_fields_and_membership() {
         let bytes = encode(&fixture()).unwrap();
         for value in [
             changed_manifest(&bytes, |v| v["version"] = 2.into()),
-            changed_manifest(&bytes, |v| v["project"]["workspace"]["schema_version"] = 2.into()),
-            changed_manifest(&bytes, |v| v["project"]["workspace"]["panels"][0]["future"] = true.into()),
-            changed_manifest(&bytes, |v| {v["project"]["workspace"]["panels"][0].as_object_mut().unwrap().remove("expression");}),
+            changed_manifest(&bytes, |v| {
+                v["project"]["workspace"]["schema_version"] = 2.into()
+            }),
+            changed_manifest(&bytes, |v| {
+                v["project"]["workspace"]["panels"][0]["future"] = true.into()
+            }),
+            changed_manifest(&bytes, |v| {
+                v["project"]["workspace"]["panels"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("expression");
+            }),
             changed_manifest(&bytes, |v| v["images"][0]["owner"] = "999".into()),
             changed_manifest(&bytes, |v| v["images"][0]["kind"] = "reference".into()),
             changed_manifest(&bytes, |v| v["images"][0]["digest"] = "bad".into()),
             changed_manifest(&bytes, |v| v["images"][0]["mime"] = "image/jpeg".into()),
-            changed_manifest(&bytes, |v| v["images"][0]["size"] = (MAX_IMAGE_BYTES + 1).into()),
-            changed_manifest(&bytes, |v| v["project"]["workspace"]["panels"][0]["images"][0]["url"] = "../../secret".into()),
-            changed_manifest(&bytes, |v| { let entry = v["images"][0].clone(); v["images"].as_array_mut().unwrap().push(entry); }),
-        ] { assert!(parse(value).is_err()); }
+            changed_manifest(&bytes, |v| {
+                v["images"][0]["size"] = (MAX_IMAGE_BYTES + 1).into()
+            }),
+            changed_manifest(&bytes, |v| {
+                v["project"]["workspace"]["panels"][0]["images"][0]["url"] = "../../secret".into()
+            }),
+            changed_manifest(&bytes, |v| {
+                let entry = v["images"][0].clone();
+                v["images"].as_array_mut().unwrap().push(entry);
+            }),
+        ] {
+            assert!(parse(value).is_err());
+        }
     }
     #[test]
     fn framing_corruption_and_image_decode_are_bounded() {
-        let archive = fixture(); let bytes = encode(&archive).unwrap();
-        for length in [0, 7, 11, bytes.len() - 1] { assert!(parse(bytes[..length].to_vec().into()).is_err()); }
-        let mut extra = bytes.clone(); extra.push(0); assert!(parse(extra.into()).is_err());
-        let mut bad_length = bytes.clone(); bad_length[8..12].copy_from_slice(&u32::MAX.to_be_bytes()); assert!(parse(bad_length.into()).is_err());
-        let mut bad_magic = bytes.clone(); bad_magic[7] = 2; assert!(parse(bad_magic.into()).is_err());
-        let mut corrupt = bytes; *corrupt.last_mut().unwrap() ^= 1; assert!(parse(corrupt.into()).is_err());
-        let mut invalid_image = fixture(); invalid_image.images[0] = Bytes::from_static(b"not an image"); invalid_image.entries[0].size = invalid_image.images[0].len(); invalid_image.entries[0].digest = storage::digest(&invalid_image.images[0]); assert!(parse(encode(&invalid_image).unwrap().into()).is_err());
+        let archive = fixture();
+        let bytes = encode(&archive).unwrap();
+        for length in [0, 7, 11, bytes.len() - 1] {
+            assert!(parse(bytes[..length].to_vec().into()).is_err());
+        }
+        let mut extra = bytes.clone();
+        extra.push(0);
+        assert!(parse(extra.into()).is_err());
+        let mut bad_length = bytes.clone();
+        bad_length[8..12].copy_from_slice(&u32::MAX.to_be_bytes());
+        assert!(parse(bad_length.into()).is_err());
+        let mut bad_magic = bytes.clone();
+        bad_magic[7] = 2;
+        assert!(parse(bad_magic.into()).is_err());
+        let mut corrupt = bytes;
+        *corrupt.last_mut().unwrap() ^= 1;
+        assert!(parse(corrupt.into()).is_err());
+        let mut invalid_image = fixture();
+        invalid_image.images[0] = Bytes::from_static(b"not an image");
+        invalid_image.entries[0].size = invalid_image.images[0].len();
+        invalid_image.entries[0].digest = storage::digest(&invalid_image.images[0]);
+        assert!(parse(encode(&invalid_image).unwrap().into()).is_err());
     }
     #[test]
     fn duplicate_project_image_id_is_rejected_beyond_model_validation() {
-        let mut archive = fixture(); let image = archive.project.workspace.panels[0].images[0].clone(); archive.project.workspace.panels[1].images.push(image);
-        assert!(archive.project.workspace.validate().is_ok()); assert!(members(&archive.project).is_err());
+        let mut archive = fixture();
+        let image = archive.project.workspace.panels[0].images[0].clone();
+        archive.project.workspace.panels[1].images.push(image);
+        assert!(archive.project.workspace.validate().is_ok());
+        assert!(members(&archive.project).is_err());
     }
 }

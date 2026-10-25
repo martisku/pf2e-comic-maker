@@ -1,6 +1,6 @@
 # F07: Project backup and restoration
 
-Status: Approved
+Status: Implemented
 
 Root review approved 2026-10-25 under the user’s F07 implementation authorization.
 
@@ -57,7 +57,7 @@ SHA-256 detects accidental corruption; backups are neither encrypted nor signed.
   returns the normal ProjectSnapshot JSON. New project UUID is the restore UUID.
   Same UUID and identical archive digest replays the same result; changed bytes
   or collision with ordinary project creation returns conflict. Existing origin
-  protection and authentication apply. JSON errors use existing ApiError shape.
+  protection and authentication apply. Errors use the existing plain-text ApiError response.
 - Project browser gains backup download and restore file controls with progress,
   disabled duplicate actions and clear errors; success refreshes the list and
   opens the independent copy. Preserve generation checks and navigation guards.
@@ -76,10 +76,11 @@ shared with the original project. Preserve project name and description exactly.
 
 Add an additive `project_restores` journal with restore UUID, archive digest,
 state and generated destination catalog/cleanup metadata. Reserve the journal
-idempotently after validation, rejecting existing project UUIDs. Acquire a journal
-row lock for the upload/finalization attempt, held throughout its object writes.
-The journal commits the complete object-key plan before uploads so interruption
-cannot lose cleanup knowledge. Each upload attempt reserves a fresh mapping/keys durably before writing. A
+idempotently after validation, rejecting existing project UUIDs. Commit a fresh candidate object-key plan under the journal reservation lock,
+then reacquire the parent journal lock and recheck ready/digest before uploading.
+Hold this lock throughout object writes/finalization; no second pool connection
+is acquired while holding it. The complete plan is durable before uploads so
+interruption cannot lose cleanup knowledge. Each upload attempt reserves a fresh mapping/keys durably before writing. A
 failed attempt leaves immutable cleanup tombstones; retries never reuse its keys.
 
 Write and verify all objects, then insert the new workspace and all ready panel
@@ -90,7 +91,8 @@ ownership checks. If final commit has an ambiguous outcome, inspect journal/proj
 state before cleanup; never delete ready objects. Retrying a ready journal reads
 the current independently edited copy rather than overwriting it.
 
-On failures delete only keys owned by a locked pending restore. Keep pending
+On failures delete only nonready attempt keys while holding their parent journal
+lock, including failed-attempt tombstones on a later-ready restore. Keep pending
 journal keys if deletion fails. Extend explicit reconciliation to lock pending
 restore journals with `FOR UPDATE SKIP LOCKED`, delete their keys, and retain them as
 cleanup tombstones; this cannot race an active attempt holding its row lock.
@@ -99,7 +101,9 @@ delete, because a timed-out PUT can complete late. New attempts always use fresh
 keys, so delayed deletion cannot remove a retry’s or published copy’s objects. The normal panel and
 reference reconciler never sees restore objects before publication. Crash recovery
 therefore works whether failure occurs before, during or after object upload or
-transaction commit. Journal records remain for retry identity; destructive journal
+transaction commit. Journal records remain for retry identity; rotate cleanup parents by last-cleaned timestamp and
+continue past individual object deletion failures so old tombstones cannot starve
+later cleanup. Destructive journal
 retention policy is outside this increment.
 
 ## Implementation and verification
@@ -120,3 +124,9 @@ concurrent retries and publish ambiguity. Browser smoke covers export/restore,
 errors and continued editing of both copies. Run formatting, native tests and
 Clippy, Wasm Clippy/build, release build and relevant disposable browser workflows.
 Record exact executed checks and limitations; no live deployment is implied.
+
+## Verification
+
+[Local verification](../development/project-backup-verification.md) passed archive
+validation and persistence failure tests, complete browser roundtrip, existing
+regressions and fresh-container retention. No live deployment is claimed.

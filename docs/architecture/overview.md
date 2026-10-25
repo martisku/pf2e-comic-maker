@@ -1,5 +1,15 @@
 # Current architecture
 
+F07 adds browser export/import of a self-contained versioned `.comicbackup` file.
+The archive includes complete saved project data and every currently referenced
+original, including alternatives and asset references. Restore validates the whole
+archive, assigns independent project/asset/image identities, stores originals and
+publishes the new project/catalogs atomically. Migration 0005 records idempotent
+restore identities and immutable cleanup attempts. See the
+[backup decision](../decisions/0005-project-backup-and-atomic-restoration.md),
+[plan](../plans/project-backup.md) and [verification](../development/project-backup-verification.md).
+
+
 The panel/page and visual-reference increment adds complete panel planning fields,
 chapter moves, confirmed panel/page removal, multiple pages and derived reading
 order. Assets own labeled reference images exposed in their library and associated
@@ -9,7 +19,7 @@ revision, idempotency and reconciliation safeguards. See
 [decision 0004](../decisions/0004-panel-pages-and-reference-storage.md) and the
 [panel/page](../plans/panel-page-management.md) and
 [reference](../plans/visual-references.md) plans. See [verification](../development/panels-references-verification.md);
-no live deployment is implied. Backup/restore remains F07.
+no live deployment is implied. F07 now supplies the backup/restore path described above.
 
 
 The chapter/library increment adds ordered chapters with one editable composition
@@ -100,7 +110,6 @@ disposable PostgreSQL/S3 fixtures and fresh-container retention checks. This
 can optionally initialize the schema and request the verified main commit on
 Render through a scoped hook. Activation requires provider settings and secrets;
 this does not provision a paid service or prove live readiness.
-Offline editing, multi-user/project authorization, thumbnails, and full project
-backup/restore remain separate scope.
+Offline editing, multi-user/project authorization, thumbnails, and generated thumbnail derivatives remain separate scope.
 
 See [prototype setup and limits](../development/dioxus-prototype.md).

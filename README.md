@@ -326,5 +326,11 @@ panels. Existing images and identities are preserved through these operations.
 The panel/page and reference increment is on `feature/panels-pages-and-references`.
 See [feature status](docs/feature-status.md), [verification](docs/development/panels-references-verification.md),
 [panel/page plan](docs/plans/panel-page-management.md), and
-[reference plan](docs/plans/visual-references.md). Backup/restore (F07) remains;
-this increment does not claim live deployment or complete milestone verification.
+[reference plan](docs/plans/visual-references.md). Browser backup/restore (F07) is implemented on `feature/project-backup-restore`.
+See [backup verification](docs/development/project-backup-verification.md). No live
+deployment is claimed.
+
+To back up saved work, open the project and choose **Export project backup**.
+To restore, open **Projects**, select the `.comicbackup` file and choose
+**Restore backup**. Restoration creates an independent project and leaves the
+current project intact. Archives are limited to 256 MiB and are not encrypted.

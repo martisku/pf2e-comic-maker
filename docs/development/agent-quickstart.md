@@ -30,7 +30,7 @@ The baseline includes independent projects, chapter management, shared assets,
 full panel planning, multiple pages and visual references (PRs #4, #7 and #8).
 Project documents use schema v3; old stored documents migrate on reading while
 old-format writes are rejected. Panel and reference uploads have separate durable
-catalogs. F07 backup/restore is the current implementation task; see its
+catalogs. F07 browser backup/restore is implemented; see its
 [requirement](../requirements/project-backup.md) and the feature-status table.
 Do not start from earlier feature branches after a squash merge.
 
@@ -48,6 +48,7 @@ Check current Actions/Render status before reporting a release as live.
 | HTTP routes and image validation | `crates/server/src/lib.rs` |
 | Transactions, revisions and project persistence | `crates/server/src/db.rs` |
 | Login, origin and runtime configuration | `crates/server/src/auth.rs`, `config.rs` |
+| Backup format, restore publication and cleanup | `crates/server/src/backup.rs`, `crates/web/src/backup.rs`, migration 0005 |
 | Image object storage | `crates/server/src/storage.rs` |
 | Additive schema changes | `crates/server/migrations/` |
 | Database/object-store failure tests | `crates/server/tests/persistence.rs` |
@@ -123,3 +124,19 @@ Before handing off, update the affected feature-status row and plan evidence.
 Include the commit/PR, checks actually run, remaining acceptance criteria and
 deployment state. Update this guide when entry points or commands change;
 keep detailed feature progress in `docs/feature-status.md`.
+
+## F07 invariants
+
+- `.comicbackup` v1 accepts workspace schema v3 only; keep strict nested validation
+  and exact descriptor/payload coverage. Limits are 256 MiB total, 8 MiB manifest,
+  1,000 images and 20,000,000 bytes per image. Acquire the backup semaphore before
+  collecting input; hold it through blocking validation or streamed download.
+- Commit immutable candidate cleanup keys before taking the restore journal lock.
+  Publish the new project, image catalogs and ready state in one transaction.
+  Never overwrite a source project or reuse failed-attempt keys on retry.
+- Keep cleanup tombstones revisitable for late PUTs and rotate cleanup fairly.
+  A ready retry returns the current restored copy without overwriting its edits.
+- Use `scripts/backup-smoke.cjs` for full milestone roundtrip and its retention
+  mode after replacing the runtime. Run only against disposable storage.
+- Apply migration 0005 before testing routes. A missing migration can surface as
+  HTTP 503; distinguish test setup errors from archive validation failures.

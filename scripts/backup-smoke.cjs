@@ -51,7 +51,8 @@ const artifact = 'artifacts/backup-retention.json';
     const png = Buffer.from(await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 24; c.height = 18; c.getContext('2d').fillRect(0, 0, 24, 18); return c.toDataURL('image/png').split(',')[1]; }), 'base64');
     let source = await (await api('/api/projects', 'post', { data: { project_id: randomUUID(), name: `Backup milestone ${randomUUID().slice(0, 8)}`, description: 'Complete project description' } })).json();
     const w = source.workspace;
-    w.panels = w.panels.slice(0, 3);
+    w.panels = [1, 2, 3].map(id => ({ id, title: `Panel ${id}`, action: '', dialogue: '', expression: '', framing: '', mood: '', production_notes: '', assets: { characters: [], location: null, equipment: [] }, images: [], selected_image: null, fill: true, crop_x: 50, crop_y: 50 }));
+    w.next_panel_id = Math.max(w.next_panel_id, 4);
     w.assets = ['Character', 'Location', 'Equipment'].map(kind => ({ id: randomUUID(), kind, name: `${kind} shared`, description: `${kind} description`, design_notes: `${kind} design`, character_size: kind === 'Character' ? 'Small' : null, reference_images: [] }));
     w.panels.forEach((panel, i) => Object.assign(panel, { title: `Ordered panel ${i + 1}`, action: `Action ${i}`, dialogue: `Dialogue ${i}`, expression: `Expression ${i}`, framing: `Framing ${i}`, mood: `Mood ${i}`, production_notes: `Production ${i}`, fill: i !== 1, crop_x: 17 + i, crop_y: 78 - i, assets: { characters: [w.assets[0].id], location: w.assets[1].id, equipment: [w.assets[2].id] } }));
     w.chapters = [

@@ -1,5 +1,14 @@
 # Dioxus web prototype
 
+## Project backup and restoration
+
+Apply migration 0005 with `comic-server migrate`. Export is available once a
+project is saved; restore from Projects creates a new independent copy. The
+versioned `.comicbackup` contains metadata and original panel/reference images.
+See [the plan](../plans/project-backup.md) for format/limits and
+[verification](project-backup-verification.md) for executed acceptance checks.
+
+
 ## Panel/page and reference increment
 
 Apply migrations with `comic-server migrate` before starting the updated server;
