@@ -77,10 +77,12 @@ pub fn ChapterManager(
                                 }
                                 button { "aria-label": "Move chapter {chapter.title} up", disabled: blocked || index == 0,
                                     onclick: move |_| {
+                                        if (session.busy)() || (session.uncertain)() { return; }
                                         if let Some(snapshot) = session.state.write().as_mut() { snapshot.workspace.move_chapter(id, -1); session.dirty.set(true); }
                                     }, "↑" }
                                 button { "aria-label": "Move chapter {chapter.title} down", disabled: blocked || index + 1 == snapshot.workspace.chapters.len(),
                                     onclick: move |_| {
+                                        if (session.busy)() || (session.uncertain)() { return; }
                                         if let Some(snapshot) = session.state.write().as_mut() { snapshot.workspace.move_chapter(id, 1); session.dirty.set(true); }
                                     }, "↓" }
                             }

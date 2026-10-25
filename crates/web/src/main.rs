@@ -1,8 +1,9 @@
 mod assets;
 mod chapters;
+mod panels;
 mod projects;
 
-use comic_model::{Layout, MAX_IMAGE_BYTES, Panel, ProjectSnapshot};
+use comic_model::{MAX_IMAGE_BYTES, Panel, ProjectSnapshot};
 use dioxus::html::FileData;
 use dioxus::prelude::*;
 use gloo_net::http::Request;
@@ -40,6 +41,8 @@ fn App() -> Element {
     let mut overview = use_signal(|| false);
     let mut library = use_signal(|| false);
     let mut selected_chapter = use_signal(|| 1u32);
+    let mut selected_page = use_signal(|| 0u32);
+    let mut page_scope = use_signal(|| (String::new(), 0u32));
     let mut selection_project = use_signal(|| None::<String>);
     use_effect(move || {
         let project = state
@@ -67,18 +70,55 @@ fn App() -> Element {
             .cloned()
     });
     let chapter_id = chapter.as_ref().map(|c| c.id).unwrap_or(0);
-    let page = chapter.as_ref().and_then(|c| c.pages.first()).cloned();
+    let scope = (project_key.to_string(), chapter_id);
+    use_effect(move || {
+        if *page_scope.peek() != scope {
+            page_scope.set(scope.clone());
+            selected_page.set(0);
+        }
+    });
+    let page = chapter
+        .as_ref()
+        .and_then(|c| {
+            c.pages
+                .iter()
+                .find(|p| p.id == selected_page())
+                .or_else(|| c.pages.first())
+        })
+        .cloned();
+    let order = workspace
+        .as_ref()
+        .map(|w| w.reading_order(chapter_id))
+        .unwrap_or_default();
+    let number = |id| order.iter().position(|placed| *placed == id).map(|n| n + 1);
+    let context = |id| {
+        chapter
+            .as_ref()
+            .and_then(|c| {
+                c.pages.iter().enumerate().find_map(|(i, p)| {
+                    p.slots
+                        .iter()
+                        .position(|slot| *slot == Some(id))
+                        .map(|slot| format!("Page {} · Position {}", i + 1, slot + 1))
+                })
+            })
+            .unwrap_or_else(|| "Unplaced".into())
+    };
     let panels: Vec<Panel> = workspace
         .as_ref()
         .map(|w| {
-            w.panels
-                .iter()
-                .filter(|p| {
+            let mut ids = order.clone();
+            if let Some(chapter) = &chapter {
+                ids.extend(
                     chapter
-                        .as_ref()
-                        .is_some_and(|c| c.panel_ids.contains(&p.id))
-                })
-                .cloned()
+                        .panel_ids
+                        .iter()
+                        .filter(|id| !order.contains(id))
+                        .copied(),
+                );
+            }
+            ids.iter()
+                .filter_map(|id| w.panels.iter().find(|p| p.id == *id).cloned())
                 .collect()
         })
         .unwrap_or_default();
@@ -142,7 +182,7 @@ fn App() -> Element {
             } else if session.invalid() {
                 div { class: "loading", "Choose Projects to open your saved work." }
             } else if let Some(workspace) = workspace {
-                fieldset { class: "workspace-fields", disabled: session.loading(),
+                fieldset { class: "workspace-fields", disabled: session.loading() || busy() || (session.uncertain)(),
 
                 section { class: "project-heading",
                     div { p { class: "eyebrow", "YOUR ILLUSTRATED STORY" }
@@ -163,10 +203,10 @@ fn App() -> Element {
                     p { class: "intro", "Plan each moment. Arrange the page. Replace only the image you want to change." }
                 }
                 if library() {
-                    assets::AssetLibrary { key: "{project_key}", state, dirty }
+                    assets::AssetLibrary { key: "{project_key}", state, dirty, session }
                 } else {
                 chapters::ChapterManager { key: "{project_key}", session, selected: selected_chapter, selected_panel: selected }
-                if let Some(page) = page {
+                { rsx! { panels::PageManager { key: "{project_key}:{chapter_id}", session, chapter_id, selected_page, selected_panel: selected } } }
                 if overview() {
                     main { class: "story-overview", "aria-label": "Story overview",
                         section { class: "archive-hero",
@@ -179,14 +219,17 @@ fn App() -> Element {
                             span { class: "art-credit", "ATMOSPHERE ART · NOT PROJECT CONTENT" }
                         }
                         div { class: "overview-heading", h2 { "Moments in your story" }
-                            span { "{panels.len()} panels · one working page" }
+                            span { "{panels.len()} panels · {chapter.as_ref().map(|c| c.pages.len()).unwrap_or(0)} pages" }
                         }
                         div { class: "story-grid",
                             for panel in panels.iter() {
                                 {
                                     let id = panel.id;
-                                    let position = page.slots.iter().position(|p| *p == Some(id));
+                                    let position = number(id);
+                                    let title = panels::label(panel, position);
                                     rsx! {
+                                        div { key: "{id}",
+                                        if position.is_none() && panels.iter().find(|p| number(p.id).is_none()).map(|p| p.id) == Some(id) { h3 { "Unplaced panels" } }
                                         button { class: "story-card", onclick: move |_| { selected.set(id); overview.set(false); library.set(false); },
                                             div { class: "story-card-art",
                                                 if let Some(url) = panel.image_url() {
@@ -196,11 +239,12 @@ fn App() -> Element {
                                                 }
                                             }
                                             div { class: "story-card-copy",
-                                                p { class: "eyebrow", if let Some(slot) = position { "POSITION {slot + 1}" } else { "UNPLACED" } }
-                                                h3 { "{panel.title}" }
+                                                p { class: "eyebrow", if let Some(slot) = position { "PANEL {slot}" } else { "UNPLACED" } }
+                                                h3 { "{title}" }
                                                 p { class: "story-excerpt", "{panel.action}" }
                                                 span { class: "story-card-footer", span { "{panel.images.len()} image alternatives" } span { "Open panel →" } }
                                             }
+                                        }
                                         }
                                     }
                                 }
@@ -215,59 +259,51 @@ fn App() -> Element {
                         for panel in panels.iter() {
                             {
                                 let id = panel.id;
-                                let position = page.slots.iter().position(|p| *p == Some(id));
+                                let position = number(id);
+                                let title = panels::label(panel, position);
+                                let placement = context(id);
                                 let is_active = Some(id) == active_id;
                                 rsx! {
+                                    div { key: "{id}",
+                                    if position.is_none() && panels.iter().find(|p| number(p.id).is_none()).map(|p| p.id) == Some(id) { h3 { "Unplaced panels" } }
                                     button { class: if is_active { "panel-card active" } else { "panel-card" },
                                         onclick: move |_| selected.set(id), "aria-pressed": is_active,
-                                        span { class: "panel-number", if let Some(slot) = position { "{slot + 1}" } else { "◇" } }
-                                        div { strong { "{panel.title}" }
-                                            small { if let Some(slot) = position { "Position {slot + 1}" } else { "Unplaced" } }
+                                        span { class: "panel-number", if let Some(slot) = position { "{slot}" } else { "◇" } }
+                                        div { strong { "{title}" }
+                                            small { "{placement}" }
                                         }
                                         span { class: "panel-arrow", "›" }
+                                    }
                                     }
                                 }
                             }
                         }
                         p { class: "list-note", "Panel identities stay the same when you change their position." }
                     }
+                    if let Some(page) = &page {
                     section { class: "composition", "aria-label": "Page composition",
-                        div { class: "composition-toolbar",
-                            div { p { class: "eyebrow", "PAGE 01" } h2 { "Page composition" } }
-                            label { "Layout"
-                                select { value: page.layout.css_class(), "aria-label": "Page layout",
-                                    oninput: move |event| {
-                                        let layout = match event.value().as_str() { "full" => Layout::Full, "wide" => Layout::Wide, _ => Layout::Grid };
-                                        if let Some(snapshot) = state.write().as_mut()
-                                            && let Some(page) = snapshot.workspace.chapter_mut(chapter_id).and_then(|c| c.pages.first_mut()) {
-                                            page.change_layout(layout); dirty.set(true);
-                                        }
-                                    },
-                                    option { value: "grid", selected: page.layout == Layout::Grid, "2 × 2 grid" }
-                                    option { value: "wide", selected: page.layout == Layout::Wide, "Wide + two" }
-                                    option { value: "full", selected: page.layout == Layout::Full, "Full page" }
-                                }
-                            }
-                        }
+                        div { class: "composition-toolbar", h2 { "Page composition" } }
                         div { class: "page-surround",
                             div { class: "comic-page {page.layout.css_class()}",
                                 for (slot, panel_id) in page.slots.iter().enumerate() {
                                     {
                                         let panel = panel_id.and_then(|id| panels.iter().find(|p| p.id == id)).cloned();
+                                        let title = panel.as_ref().map(|p| panels::label(p, number(p.id))).unwrap_or_default();
+                                        let reading_number = panel.as_ref().and_then(|p| number(p.id)).unwrap_or(0);
                                         rsx! {
                                             if let Some(panel) = panel {
                                                 button { class: if Some(panel.id) == active_id { "page-panel selected" } else { "page-panel" },
-                                                    "aria-label": "Edit position {slot + 1}: {panel.title}",
+                                                    "aria-label": "Edit position {slot + 1}: {title}",
                                                     onclick: move |_| selected.set(panel.id),
                                                     if let Some(url) = panel.image_url() {
-                                                        img { src: "{url}", alt: "{panel.title}",
+                                                        img { src: "{url}", alt: "{title}",
                                                             style: format!("object-fit: {}; object-position: {}% {}%;", if panel.fill { "cover" } else { "contain" }, panel.crop_x, panel.crop_y) }
                                                     } else {
                                                         div { class: "empty-art", span { class: "art-symbol", "◇" }
-                                                            strong { "{panel.title}" } small { "Select to plan & add an image" }
+                                                            strong { "{title}" } small { "Select to plan & add an image" }
                                                         }
                                                     }
-                                                    span { class: "position-badge", "{slot + 1}" }
+                                                    span { class: "position-badge", "{reading_number}" }
                                                 }
                                             } else {
                                                 div { class: "empty-slot", span { "+" } small { "Empty position {slot + 1}" } }
@@ -279,18 +315,19 @@ fn App() -> Element {
                         }
                         p { class: "composition-note", "Original images are preserved. Panels outside this layout remain in the panel list." }
                     }
+                    }
                     if let Some(panel) = active {
                         {
                             let id = panel.id;
-                            let position = page.slots.iter().position(|p| *p == Some(id));
+                            let position = number(id);
                             let upload_disabled = busy() || dirty() || error().is_some();
                             rsx! {
                                 aside { class: "editor", "aria-label": "Panel editor",
-                                    p { class: "eyebrow", if let Some(slot) = position { "POSITION {slot + 1}" } else { "UNPLACED PANEL" } } h2 { "Shape this moment" }
+                                    p { class: "eyebrow", if let Some(slot) = position { "PANEL {slot}" } else { "UNPLACED PANEL" } } p { "{context(id)}" } h2 { "Shape this moment" }
                                     label { "Title"
                                         input { value: "{panel.title}", oninput: move |e| edit_panel(state, dirty, id, |p| p.title = e.value()) }
                                     }
-                                    label { "Action & composition"
+                                    label { "Action"
                                         textarea { rows: "4", value: "{panel.action}", oninput: move |e| edit_panel(state, dirty, id, |p| p.action = e.value()) }
                                     }
                                     label { "Expression"
@@ -301,17 +338,27 @@ fn App() -> Element {
                                         textarea { rows: "2", placeholder: "What is said in this moment?", value: "{panel.dialogue}",
                                             oninput: move |e| edit_panel(state, dirty, id, |p| p.dialogue = e.value()) }
                                     }
-                                    label { "Page position"
-                                        select { value: position.map(|i| i.to_string()).unwrap_or_else(|| "unplaced".into()),
+                                    label { "Framing & composition"
+                                        textarea { rows: "2", value: "{panel.framing}", oninput: move |e| edit_panel(state, dirty, id, |p| p.framing = e.value()) }
+                                    }
+                                    label { "Mood"
+                                        textarea { rows: "2", value: "{panel.mood}", oninput: move |e| edit_panel(state, dirty, id, |p| p.mood = e.value()) }
+                                    }
+                                    label { "Production notes"
+                                        textarea { rows: "3", value: "{panel.production_notes}", oninput: move |e| edit_panel(state, dirty, id, |p| p.production_notes = e.value()) }
+                                    }
+                                    label { "Panel placement"
+                                        select { "aria-label": "Panel placement", value: chapter.as_ref().and_then(|c| c.pages.iter().find_map(|p| p.slots.iter().position(|slot| *slot == Some(id)).map(|slot| format!("{}:{slot}", p.id)))).unwrap_or_else(|| "unplaced".into()),
                                             oninput: move |event| {
-                                                let target = event.value().parse::<usize>().ok();
-                                                if let Some(snapshot) = state.write().as_mut()
-                                                    && let Some(page) = snapshot.workspace.chapter_mut(chapter_id).and_then(|c| c.pages.first_mut()) {
-                                                    page.place(id, target); dirty.set(true);
-                                                }
+                                                if busy() || (session.uncertain)() { return; }
+                                                let value = event.value();
+                                                let target = value.split_once(':').and_then(|(page, slot)| Some((page.parse().ok()?, slot.parse().ok()?)));
+                                                if let Some(snapshot) = state.write().as_mut() && snapshot.workspace.place_panel(chapter_id, id, target).is_ok() { dirty.set(true); }
                                             },
-                                            option { value: "unplaced", selected: position.is_none(), "Unplaced" }
-                                            for slot in 0..page.slots.len() { option { value: "{slot}", selected: position == Some(slot), "Position {slot + 1}" } }
+                                            option { value: "unplaced", "Unplaced" }
+                                            if let Some(chapter) = &chapter { for (index, page) in chapter.pages.iter().enumerate() {
+                                                for slot in 0..page.slots.len() { option { value: "{page.id}:{slot}", "Page {index + 1} · Position {slot + 1}" } }
+                                            } }
                                         }
                                     }
                                     div { class: "image-section",
@@ -405,7 +452,6 @@ fn App() -> Element {
                             }
                         }
                     }
-                }
                 }
                 }
             }

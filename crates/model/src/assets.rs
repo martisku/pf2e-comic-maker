@@ -19,6 +19,16 @@ impl AssetKind {
     }
 }
 
+pub const MAX_ASSET_REFERENCES: usize = 100;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AssetReference {
+    pub id: String,
+    pub url: String,
+    pub label: String,
+    pub description: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Asset {
     pub id: String,
@@ -27,6 +37,8 @@ pub struct Asset {
     pub description: String,
     pub design_notes: String,
     pub character_size: Option<String>,
+    #[serde(default)]
+    pub reference_images: Vec<AssetReference>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -82,9 +94,27 @@ impl Workspace {
             return Err("A project supports up to 200 assets.".into());
         }
         let mut ids = HashSet::new();
+        let mut reference_ids = HashSet::new();
         for asset in &self.assets {
             if !valid_id(&asset.id) || !ids.insert(asset.id.as_str()) {
                 return Err("Invalid or duplicate asset identity.".into());
+            }
+            if asset.reference_images.len() > MAX_ASSET_REFERENCES {
+                return Err("An asset supports up to 100 reference images.".into());
+            }
+            for reference in &asset.reference_images {
+                let valid_url = ["png", "jpg", "webp"]
+                    .iter()
+                    .any(|ext| reference.url == format!("/references/{}.{ext}", reference.id));
+                if !valid_id(&reference.id)
+                    || !reference_ids.insert(reference.id.as_str())
+                    || !valid_url
+                    || reference.label.trim().is_empty()
+                    || reference.label.len() > 500
+                    || reference.description.len() > 20_000
+                {
+                    return Err("Invalid reference identity, label or description.".into());
+                }
             }
             if asset.name.trim().is_empty()
                 || asset.name.len() > 500
@@ -139,6 +169,7 @@ mod tests {
             description: "A hero".into(),
             design_notes: "Green cloak".into(),
             character_size: Some("Small".into()),
+            reference_images: vec![],
         });
         workspace.panels[0].images = vec![
             crate::PanelImage {
@@ -154,6 +185,31 @@ mod tests {
         workspace.panels[0].assets.characters.push(ID.into());
         workspace.panels[1].assets.characters.push(ID.into());
         workspace
+    }
+
+    #[test]
+    fn references_validate_identity_text_and_legacy_defaults() {
+        let mut workspace = workspace();
+        let reference = AssetReference {
+            id: "8fd2c62e-c2ce-4c27-bb78-e527a9ff34cd".into(),
+            url: "/references/8fd2c62e-c2ce-4c27-bb78-e527a9ff34cd.png".into(),
+            label: "Costume".into(),
+            description: "Green cloak".into(),
+        };
+        workspace.assets[0].reference_images.push(reference.clone());
+        workspace.validate_assets().unwrap();
+        workspace.assets[0].reference_images.push(reference);
+        assert!(workspace.validate_assets().is_err());
+        workspace.assets[0].reference_images.pop();
+        workspace.assets[0].reference_images[0].label = " ".into();
+        assert!(workspace.validate_assets().is_err());
+        workspace.assets[0].reference_images[0].label = "Costume".into();
+        workspace.assets[0].reference_images[0].url = "/images/foreign.png".into();
+        assert!(workspace.validate_assets().is_err());
+        let mut json = serde_json::to_value(&workspace.assets[0]).unwrap();
+        json.as_object_mut().unwrap().remove("reference_images");
+        let legacy: Asset = serde_json::from_value(json).unwrap();
+        assert!(legacy.reference_images.is_empty());
     }
 
     #[test]

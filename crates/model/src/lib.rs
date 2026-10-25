@@ -1,5 +1,6 @@
 pub mod assets;
-pub use assets::{Asset, AssetKind, PanelAssets};
+mod panels;
+pub use assets::{Asset, AssetKind, AssetReference, PanelAssets};
 
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +21,12 @@ pub struct Panel {
     pub dialogue: String,
     #[serde(default)]
     pub expression: String,
+    #[serde(default)]
+    pub framing: String,
+    #[serde(default)]
+    pub mood: String,
+    #[serde(default)]
+    pub production_notes: String,
     #[serde(default)]
     pub assets: PanelAssets,
     pub images: Vec<PanelImage>,
@@ -62,7 +69,7 @@ impl Layout {
     }
 }
 
-pub const WORKSPACE_SCHEMA_VERSION: u32 = 2;
+pub const WORKSPACE_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Page {
@@ -131,12 +138,12 @@ impl<'de> Deserialize<'de> for Workspace {
         }
         let wire = Wire::deserialize(deserializer)?;
         let version = wire.schema_version.unwrap_or(1);
-        if version != 1 && version != WORKSPACE_SCHEMA_VERSION {
+        if version != 1 && version != 2 && version != WORKSPACE_SCHEMA_VERSION {
             return Err(serde::de::Error::custom(
                 "Unsupported workspace schema version.",
             ));
         }
-        let (chapters, next_panel_id) = if version == WORKSPACE_SCHEMA_VERSION {
+        let (chapters, next_panel_id) = if version >= 2 {
             (
                 wire.chapters
                     .ok_or_else(|| serde::de::Error::custom("Missing chapters."))?,
@@ -202,6 +209,9 @@ impl Default for Workspace {
                     .into(),
                 dialogue: String::new(),
                 expression: String::new(),
+                framing: String::new(),
+                mood: String::new(),
+                production_notes: String::new(),
                 assets: PanelAssets::default(),
                 images: vec![],
                 selected_image: None,
@@ -303,10 +313,13 @@ impl Workspace {
         self.next_panel_id += 1;
         self.panels.push(Panel {
             id,
-            title: format!("Panel {id}"),
+            title: String::new(),
             action: String::new(),
             dialogue: String::new(),
             expression: String::new(),
+            framing: String::new(),
+            mood: String::new(),
+            production_notes: String::new(),
             assets: PanelAssets::default(),
             images: vec![],
             selected_image: None,
@@ -330,11 +343,15 @@ impl Workspace {
     pub fn place(&mut self, panel_id: u32, target: Option<usize>) {
         if let Some(chapter) = self
             .chapters
-            .iter_mut()
+            .iter()
             .find(|c| c.panel_ids.contains(&panel_id))
-            && let Some(page) = chapter.pages.first_mut()
         {
-            page.place(panel_id, target);
+            let chapter_id = chapter.id;
+            let destination =
+                target.and_then(|slot| chapter.pages.first().map(|page| (page.id, slot)));
+            if target.is_none() || destination.is_some() {
+                let _ = self.place_panel(chapter_id, panel_id, destination);
+            }
         }
     }
 
@@ -364,6 +381,9 @@ impl Workspace {
                 || panel.action.len() > 20_000
                 || panel.dialogue.len() > 20_000
                 || panel.expression.len() > 20_000
+                || panel.framing.len() > 20_000
+                || panel.mood.len() > 20_000
+                || panel.production_notes.len() > 20_000
             {
                 return Err("Panel text is too long.".into());
             }
@@ -390,9 +410,6 @@ impl Workspace {
                 if !panel_ids.contains(id) || !owned.insert(*id) {
                     return Err("Invalid chapter panel ownership.".into());
                 }
-            }
-            if chapter.pages.is_empty() {
-                return Err("Each chapter must have a composition page.".into());
             }
             let mut pages = HashSet::new();
             let mut placed = HashSet::new();
@@ -544,6 +561,7 @@ mod tests {
             description: "Shared hero".into(),
             design_notes: "Green cloak".into(),
             character_size: None,
+            reference_images: vec![],
         });
         workspace.panels[0].assets.characters.push(asset_id.clone());
         let retained_chapter = workspace.add_chapter().unwrap();
@@ -561,7 +579,7 @@ mod tests {
         assert_eq!(workspace.assets, assets);
         assert_eq!(
             workspace.asset_users(&asset_id),
-            vec![(retained_panel, format!("Panel {retained_panel}"))]
+            vec![(retained_panel, String::new())]
         );
         assert!(workspace.remove_asset(&asset_id).is_err());
         workspace.validate().unwrap();
@@ -571,10 +589,10 @@ mod tests {
     }
 
     #[test]
-    fn chapters_require_a_composition_page() {
+    fn chapters_allow_zero_or_multiple_composition_pages() {
         let mut workspace = Workspace::default();
         let page = workspace.chapters[0].pages.pop().unwrap();
-        assert!(workspace.validate().is_err());
+        workspace.validate().unwrap();
         workspace.chapters[0].pages.push(page.clone());
         workspace.validate().unwrap();
         workspace.chapters[0].pages.push(Page {

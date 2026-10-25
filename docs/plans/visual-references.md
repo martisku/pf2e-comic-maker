@@ -1,6 +1,6 @@
 # Implementation plan: Visual references
 
-Status: Draft
+Status: Approved (2026-10-25; root review and implementation authorization)
 
 ## Requirement and selected scope
 
@@ -51,6 +51,9 @@ Add `server/references.rs` with binary upload POST
 limit, decoder semaphore and the exact same image validator as panel uploads.
 Reserve and finalize lock project before intent. Validate project/asset existence
 and revision before reserving; replay must match project, asset, bytes and MIME.
+Finalization rechecks current asset existence and the reference-count bound after
+locking the project; concurrent asset deletion or revision change conflicts without
+resurrecting the asset. Tests cover deletion between reserve and finish.
 Finalization appends exactly one immutable id/URL pair to the asset and increments
 the aggregate revision atomically with intent readiness. Repeat UUID replay
 returns the original successful revision only under existing replay rules;

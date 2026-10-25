@@ -17,3 +17,16 @@
 .panel-assets .asset-checkbox input { width: auto; }
 .shared-asset-definition p { white-space: pre-wrap; }
 @media (max-width: 700px) { .asset-library-columns { grid-template-columns: 1fr; } .asset-library { padding: 16px; } .asset-library button, .asset-library select { min-height: 44px; } .asset-library select { font-size: 16px; } }
+.reference-gallery { margin: 20px 0; min-width: 0; }
+.reference-gallery small { display: block; margin: 8px 0; }
+.reference-thumbnails { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.reference-card { min-width: 0; padding: 10px; border: 1px solid #a58a5f66; overflow-wrap: anywhere; }
+.reference-thumbnail { width: 100%; padding: 0; background: #151d18; border: 1px solid #a58a5f66; cursor: zoom-in; }
+.reference-thumbnail img { width: 100%; height: 140px; object-fit: contain; display: block; }
+.reference-card input, .reference-card textarea { width: 100%; }
+.reference-lightbox { width: min(95vw, 1140px); max-width: 95vw; max-height: 95vh; padding: 0; background: #1c251e; color: var(--paper); border: 1px solid var(--brass); }
+.reference-lightbox::backdrop { background: #080d0de8; }
+.reference-lightbox-content { width: min(100%, 1100px); max-height: 95vh; overflow: auto; padding: 20px; background: #1c251e; border: 1px solid var(--brass); }
+.reference-lightbox-content img { display: block; max-width: 100%; max-height: 72vh; object-fit: contain; margin: auto; }
+.reference-lightbox-content p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.reference-upload input { max-width: 100%; }
