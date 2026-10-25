@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod backup;
 pub mod config;
 pub mod db;
 pub mod error;
@@ -35,6 +36,11 @@ pub fn router(state: AppState, access: auth::Access, public: PathBuf) -> Router 
     let protected = Router::new()
         .route("/api/workspace", get(load).put(save))
         .route("/api/projects", get(list_projects).post(create_project))
+        .route("/api/projects/{project}/backup", get(backup::export))
+        .route(
+            "/api/projects/restore",
+            post(backup::restore).layer(DefaultBodyLimit::max(backup::MAX_BACKUP_BYTES)),
+        )
         .route(
             "/api/projects/{project}",
             get(load_project).put(save_project),
@@ -290,7 +296,7 @@ async fn image(
 pub async fn reconcile(state: &AppState) -> Result<usize, ApiError> {
     let mut keys = db::reconciliation_keys(&state.db).await?;
     keys.extend(references::reconciliation_keys(&state.db).await?);
-    let mut count = 0;
+    let mut count = backup::reconcile(state).await?;
     for key in keys {
         state.images.delete(&key).await?;
         count += 1;

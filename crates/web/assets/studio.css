@@ -205,3 +205,13 @@ footer { display: flex; justify-content: space-between; gap: 15px; border-top: 1
 .unsaved-dialog { max-width: 36rem; background: var(--panel, #172820); color: var(--text, #f0e6cf); border: 1px solid #a98e50; padding: 1.5rem; border-radius: .6rem; }
 .unsaved-dialog button { margin: .4rem .5rem .4rem 0; }
 @media (max-width: 600px) { .project-browser { padding: 1rem; } .project-list-item { flex-direction: column; } }
+
+.backup-controls {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--line, #d8cdbb);
+  border-radius: 0.5rem;
+}
+.backup-controls p { max-width: 65ch; font-size: 0.9rem; }
+.backup-controls input[type="file"] { max-width: 100%; margin-bottom: 0.75rem; }
+.backup-controls button { margin-right: 0.5rem; }

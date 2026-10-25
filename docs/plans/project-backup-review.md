@@ -1,6 +1,6 @@
 # F07 backup and restoration review
 
-Status: Draft plan reviewed; revisions requested. Implementation not approved by this record.
+Status: Revised plan accepted by coordinating agent; implementation review pending.
 Date: 2026-10-25
 
 Reviewed requirement: [F07](../requirements/project-backup.md). Reviewed existing
@@ -88,3 +88,26 @@ clear failures, deliberate second copy and retry without duplicate projects.
 - Requested clarification: reject unknown nested snapshot/workspace records and
   validate the raw current schema before legacy compatibility deserialization.
   Outer manifest strictness alone does not stop silent nested-field loss.
+- Revised plan addresses these requests, with fresh attempt mappings/keys instead
+  of key reuse and immutable revisitable failed-attempt tombstones. Coordinating
+  agent approved implementation. Implementation and verification remain separate.
+- Follow-up concurrency review: do not hold a journal transaction while awaiting
+  another pool connection to commit staging metadata. Parent-lock holders/waiters
+  can exhaust every connection across instances. Commit an immutable candidate
+  key plan before acquiring the parent lock, then recheck state under that lock;
+  unused candidates remain eligible for cleanup. Cleaner and uploader must lock
+  the parent consistently. No code review or test result is claimed yet.
+- Initial code pass: strict nested field validation, exact payload framing,
+  project/catalog ownership and candidate-before-lock publication are present.
+  Remapping preserves selected alternatives and shared asset associations. Two
+  resource/progress issues were reported for correction: keep the semaphore
+  permit alive inside non-cancellable blocking work and until buffered export
+  response disposal; rotate cleanup selection so permanent tombstones do not
+  starve parents beyond a fixed first batch. Code is still being written and
+  this is not a final implementation approval or validation claim.
+- Follow-up code inspection confirms owned permits move through blocking work
+  and the chunked export response lifetime; cleanup orders by `cleaned_at`,
+  updates that timestamp and continues past individual object deletion failures.
+  Candidate key plans commit before reacquiring the parent publication lock.
+  These changes address the concrete concurrency/resource findings. Complete
+  executable verification is owned by the implementation/coordinating agents.

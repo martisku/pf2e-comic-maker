@@ -1,6 +1,8 @@
 # F07: Project backup and restoration
 
-Status: Under Review
+Status: Approved
+
+Root review approved 2026-10-25 under the user’s F07 implementation authorization.
 
 ## Scope and existing boundaries
 

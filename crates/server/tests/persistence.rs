@@ -1203,3 +1203,61 @@ async fn panel_lifecycle_and_pages_preserve_retained_originals() {
 
 #[path = "references/mod.rs"]
 mod reference_tests;
+
+#[tokio::test]
+#[ignore = "requires explicitly configured disposable PostgreSQL and S3 services"]
+async fn backups_publish_independent_copies_and_reconcile_failed_attempts() {
+    let (state, faults) = fixture().await;
+    let (origin, server) = serve(state.clone()).await;
+    let client = reqwest::Client::new();
+    let panel = db::read(&state.db).await.unwrap().workspace.panels[0].id;
+    let upload_id = Uuid::new_v4();
+    assert_eq!(upload(&client, &origin, 0, panel, upload_id, picture(image::ImageFormat::Png)).await.status(), 200);
+    let source = db::read_project(&state.db, db::original_project()).await.unwrap();
+    let response = client.get(format!("{origin}/api/projects/{}/backup?revision={}", source.project_id, source.revision)).basic_auth("comic", Some(PASSWORD)).send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    let backup = response.bytes().await.unwrap();
+    let id = Uuid::new_v4();
+    let restore = |id: Uuid, bytes: Bytes| client.post(format!("{origin}/api/projects/restore")).basic_auth("comic", Some(PASSWORD)).header("origin", &origin).header("x-restore-id", id.to_string()).header("content-type", "application/octet-stream").body(bytes);
+    faults.mode.store(2, Ordering::SeqCst);
+    faults.deny_delete.store(true, Ordering::SeqCst);
+    assert_eq!(restore(id, backup.clone()).send().await.unwrap().status(), 503);
+    assert!(db::read_project(&state.db, id).await.is_err());
+    assert_eq!(db::read_project(&state.db, db::original_project()).await.unwrap(), source);
+    let failed_keys: Vec<sqlx::types::Json<Vec<String>>> = sqlx::query_scalar("SELECT keys FROM project_restore_attempts WHERE restore_id=$1 AND state='cleanup'").bind(id).fetch_all(&state.db).await.unwrap();
+    assert_eq!(failed_keys.len(), 1);
+    // Simulate a provider completing its timed-out PUT after cleanup failed.
+    faults.mode.store(0, Ordering::SeqCst);
+    faults.inner.put(&failed_keys[0].0[0], picture(image::ImageFormat::Png), "image/png").await.unwrap();
+    faults.deny_delete.store(false, Ordering::SeqCst);
+    let response = restore(id, backup.clone()).send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    let restored: comic_model::ProjectSnapshot = response.json().await.unwrap();
+    assert_eq!(restored.project_id, id.to_string());
+    assert_eq!(restored.workspace.title, source.workspace.title);
+    assert_ne!(restored.workspace.panels[0].images[0].id, source.workspace.panels[0].images[0].id);
+    assert_eq!(restored.workspace.panels[0].selected_image, Some(restored.workspace.panels[0].images[0].id.clone()));
+    comic_server::reconcile(&state).await.unwrap();
+    assert!(faults.inner.read(&failed_keys[0].0[0]).await.is_err());
+    // Tombstones remain revisitable after a successful restore and late PUT.
+    faults.inner.put(&failed_keys[0].0[0], picture(image::ImageFormat::Png), "image/png").await.unwrap();
+    comic_server::reconcile(&state).await.unwrap();
+    assert!(faults.inner.read(&failed_keys[0].0[0]).await.is_err());
+    let image_response = client.get(format!("{}{}", origin, restored.workspace.panels[0].images[0].url)).basic_auth("comic", Some(PASSWORD)).send().await.unwrap();
+    assert_eq!(image_response.status(), 200);
+    let mut edited = restored.clone(); edited.description = "Independent edit".into();
+    let edited = db::save_project(&state.db, id, edited).await.unwrap();
+    let replay: comic_model::ProjectSnapshot = restore(id, backup.clone()).send().await.unwrap().json().await.unwrap();
+    assert_eq!(replay, edited);
+    assert_eq!(db::read_project(&state.db, db::original_project()).await.unwrap(), source);
+    let mut changed = backup.to_vec(); changed.push(0);
+    assert_eq!(restore(Uuid::new_v4(), changed.into()).send().await.unwrap().status(), 400);
+    let other = client.get(format!("{origin}/api/projects/{id}/backup?revision={}", edited.revision)).basic_auth("comic", Some(PASSWORD)).send().await.unwrap().bytes().await.unwrap();
+    assert_eq!(restore(id, other).send().await.unwrap().status(), 409);
+    // Concurrent retries return one copy, while a fresh restore identity makes another.
+    let second = Uuid::new_v4();
+    let (left, right) = tokio::join!(restore(second, backup.clone()).send(), restore(second, backup).send());
+    assert_eq!(left.unwrap().status(), 200); assert_eq!(right.unwrap().status(), 200);
+    assert_eq!(db::list_projects(&state.db).await.unwrap().len(), 3);
+    server.abort();
+}
