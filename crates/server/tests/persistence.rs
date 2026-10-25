@@ -879,6 +879,7 @@ async fn chapters_assets_and_images_keep_stable_identity() {
         description: "Shared character".into(),
         design_notes: String::new(),
         character_size: None,
+        reference_images: vec![],
     });
     for panel in &mut saved.workspace.panels {
         if panel.id == 1 || panel.id == retained {
@@ -982,3 +983,223 @@ async fn chapters_assets_and_images_keep_stable_identity() {
     }
     server.abort();
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured disposable PostgreSQL and S3 services"]
+async fn stored_v2_upgrades_but_old_clients_cannot_drop_v3_fields() {
+    use comic_model::ProjectCreate;
+    let (state, _) = fixture().await;
+    let project = Uuid::new_v4();
+    let original = db::create_project(
+        &state.db,
+        ProjectCreate {
+            project_id: project.to_string(),
+            name: "Stored v2 upgrade".into(),
+            description: "Preserved metadata".into(),
+        },
+    )
+    .await
+    .unwrap();
+    // Exercise the actual JSONB boundary, rather than deserializing a fixture
+    // directly: existing database rows predate all new optional v3 fields.
+    let mut legacy = serde_json::to_value(&original.workspace).unwrap();
+    legacy["schema_version"] = 2.into();
+    for panel in legacy["panels"].as_array_mut().unwrap() {
+        for field in ["framing", "mood", "production_notes"] {
+            panel.as_object_mut().unwrap().remove(field);
+        }
+    }
+    for asset in legacy["assets"].as_array_mut().unwrap() {
+        asset.as_object_mut().unwrap().remove("reference_images");
+    }
+    sqlx::query("UPDATE workspace SET data = $1 WHERE project_id = $2")
+        .bind(sqlx::types::Json(&legacy))
+        .bind(project)
+        .execute(&state.db)
+        .await
+        .unwrap();
+    let canonical = db::read_project(&state.db, project).await.unwrap();
+    assert_eq!(canonical.workspace.schema_version, 3);
+    assert_eq!(canonical.revision, original.revision);
+    assert_eq!(canonical.description, original.description);
+    assert_eq!(canonical.workspace, original.workspace);
+    let (origin, server) = serve(state.clone()).await;
+    let client = reqwest::Client::new();
+    // Reject both historical client versions before any new-version save.
+    for version in [1, 2] {
+        let mut old = serde_json::to_value(&canonical).unwrap();
+        old["workspace"]["schema_version"] = version.into();
+        if version == 1 {
+            let workspace = old["workspace"].as_object_mut().unwrap();
+            workspace.remove("chapters");
+            workspace.remove("next_panel_id");
+            workspace.remove("assets");
+            workspace.insert("layout".into(), "Grid".into());
+            workspace.insert("slots".into(), serde_json::json!([1, 2, 3, 4]));
+        }
+        let response = client
+            .put(format!("{origin}/api/projects/{project}"))
+            .basic_auth("comic", Some(PASSWORD))
+            .header("origin", &origin)
+            .json(&old)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), 400);
+        assert_eq!(
+            db::read_project(&state.db, project).await.unwrap(),
+            canonical
+        );
+    }
+    let saved = db::save_project(&state.db, project, canonical)
+        .await
+        .unwrap();
+    let stored: serde_json::Value =
+        sqlx::query_scalar("SELECT data FROM workspace WHERE project_id = $1")
+            .bind(project)
+            .fetch_one(&state.db)
+            .await
+            .unwrap();
+    assert_eq!(stored["schema_version"], 3);
+    assert_eq!(db::read_project(&state.db, project).await.unwrap(), saved);
+    server.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured disposable PostgreSQL and S3 services"]
+async fn panel_lifecycle_and_pages_preserve_retained_originals() {
+    use comic_model::ProjectCreate;
+    let (state, _) = fixture().await;
+    let project = Uuid::new_v4();
+    let mut saved = db::create_project(
+        &state.db,
+        ProjectCreate {
+            project_id: project.to_string(),
+            name: "Panel and page retention".into(),
+            description: String::new(),
+        },
+    )
+    .await
+    .unwrap();
+    let first_chapter = saved.workspace.chapters[0].id;
+    let panel = saved.workspace.chapters[0].panel_ids[0];
+    // Two acknowledged original alternatives must survive every layout/move.
+    for format in [image::ImageFormat::Png, image::ImageFormat::Jpeg] {
+        let bytes = picture(format);
+        let mut intent = db::Intent::new(
+            Uuid::new_v4(),
+            panel,
+            saved.revision,
+            &bytes,
+            if format == image::ImageFormat::Png {
+                "image/png"
+            } else {
+                "image/jpeg"
+            },
+        )
+        .unwrap();
+        intent.project_id = project;
+        db::reserve(&state.db, &intent).await.unwrap();
+        saved = comic_server::persist_project_upload(&state, &intent, bytes)
+            .await
+            .unwrap();
+    }
+    let destination = saved.workspace.add_chapter().unwrap();
+    let other = saved.workspace.add_panel(destination).unwrap();
+    let planning = saved
+        .workspace
+        .panels
+        .iter_mut()
+        .find(|p| p.id == panel)
+        .unwrap();
+    planning.fill = false;
+    planning.crop_x = 23;
+    planning.crop_y = 71;
+    planning.framing = "Wide framing across the bridge".into();
+    planning.mood = "Uneasy".into();
+    planning.production_notes = "Preserve the uploaded originals".into();
+    let preserved = planning.clone();
+    saved.workspace.move_panel(panel, destination).unwrap();
+    let page = saved.workspace.add_page(destination).unwrap();
+    let first_page = saved.workspace.chapter(destination).unwrap().pages[0].id;
+    saved
+        .workspace
+        .place_panel(destination, other, Some((first_page, 0)))
+        .unwrap();
+    saved
+        .workspace
+        .place_panel(destination, panel, Some((page, 0)))
+        .unwrap();
+    assert_eq!(
+        saved.workspace.reading_order(destination),
+        vec![other, panel]
+    );
+    saved.workspace.move_page(destination, page, -1);
+    assert_eq!(
+        saved.workspace.reading_order(destination),
+        vec![panel, other]
+    );
+    saved = db::save_project(&state.db, project, saved).await.unwrap();
+    assert_eq!(db::read_project(&state.db, project).await.unwrap(), saved);
+    assert_eq!(
+        saved
+            .workspace
+            .panels
+            .iter()
+            .find(|p| p.id == panel)
+            .unwrap(),
+        &preserved
+    );
+    assert!(
+        !saved
+            .workspace
+            .chapter(first_chapter)
+            .unwrap()
+            .panel_ids
+            .contains(&panel)
+    );
+    // Removing every page unplaces panels without removing their originals.
+    assert!(saved.workspace.remove_page(destination, page));
+    assert!(saved.workspace.remove_page(destination, first_page));
+    assert!(saved.workspace.reading_order(destination).is_empty());
+    assert!(saved.workspace.remove_panel(other));
+    saved = db::save_project(&state.db, project, saved).await.unwrap();
+    assert_eq!(db::read_project(&state.db, project).await.unwrap(), saved);
+    assert_eq!(
+        saved
+            .workspace
+            .panels
+            .iter()
+            .find(|p| p.id == panel)
+            .unwrap(),
+        &preserved
+    );
+    assert!(
+        saved
+            .workspace
+            .chapter(destination)
+            .unwrap()
+            .pages
+            .is_empty()
+    );
+    assert!(!saved.workspace.panels.iter().any(|p| p.id == other));
+    // A delayed upload against a panel deleted after reservation must conflict.
+    let bytes = picture(image::ImageFormat::Png);
+    let mut pending =
+        db::Intent::new(Uuid::new_v4(), panel, saved.revision, &bytes, "image/png").unwrap();
+    pending.project_id = project;
+    db::reserve(&state.db, &pending).await.unwrap();
+    assert!(saved.workspace.remove_panel(panel));
+    saved = db::save_project(&state.db, project, saved).await.unwrap();
+    assert_eq!(
+        db::finish_project(&state.db, project, pending.id)
+            .await
+            .unwrap_err()
+            .0,
+        409
+    );
+    assert_eq!(db::read_project(&state.db, project).await.unwrap(), saved);
+}
+
+#[path = "references/mod.rs"]
+mod reference_tests;

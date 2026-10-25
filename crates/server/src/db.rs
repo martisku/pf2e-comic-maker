@@ -77,14 +77,14 @@ pub fn original_project() -> Uuid {
 }
 
 #[derive(sqlx::FromRow)]
-struct ProjectRow {
+pub(crate) struct ProjectRow {
     project_id: Uuid,
     description: String,
     revision: i64,
     data: Json<Workspace>,
 }
 impl ProjectRow {
-    fn snapshot(self) -> ProjectSnapshot {
+    pub(crate) fn snapshot(self) -> ProjectSnapshot {
         // Only stored reads may upgrade a legacy document. Incoming HTTP data
         // retains its version and is rejected by Workspace::validate.
         let mut workspace = self.data.0;
@@ -156,7 +156,7 @@ pub async fn create_project(
     Ok(snapshot)
 }
 
-async fn locked_project(
+pub(crate) async fn locked_project(
     tx: &mut Transaction<'_, Postgres>,
     project: Uuid,
 ) -> Result<ProjectRow, ApiError> {
@@ -164,7 +164,7 @@ async fn locked_project(
         .bind(project).fetch_optional(&mut **tx).await?.ok_or_else(missing_project)
 }
 
-async fn write_project(
+pub(crate) async fn write_project(
     tx: &mut Transaction<'_, Postgres>,
     snapshot: &ProjectSnapshot,
 ) -> Result<(), ApiError> {
@@ -224,6 +224,7 @@ async fn save_inner(
             ));
         }
     }
+    crate::references::validate_edit(&current.workspace, &request.workspace)?;
     if legacy {
         request.description = current.description;
     }

@@ -54,9 +54,9 @@ fs.mkdirSync(output, { recursive: true });
     await page.screenshot({ path: `${output}/overview-desktop.png`, fullPage: true });
     await page.locator('.story-card').first().click();
     const editor = page.getByRole('complementary', { name: 'Panel editor' });
-    assert.equal(await editor.getByLabel('Page position').inputValue(), '0');
+    assert.equal(await editor.getByLabel('Panel placement').inputValue(), '1:0');
     await editor.getByLabel('Title', { exact: true }).fill('Wick listens');
-    await editor.getByLabel('Action & composition').fill('Wick pauses beneath the trees. A branch cracks nearby.');
+    await editor.getByLabel('Action').fill('Wick pauses beneath the trees. A branch cracks nearby.');
     await waitForData(s => s.workspace.panels[0].title === 'Wick listens');
     await saved();
     await page.reload();
@@ -94,15 +94,16 @@ fs.mkdirSync(output, { recursive: true });
     await saved();
 
     for (let id = 1; id <= 4; id++) {
+      const initialImageCount = (await read()).workspace.panels[id - 1].images.length;
       await page.locator('.panel-card').nth(id - 1).click();
       await editor.locator('input[type=file]').setInputFiles({ name: `panel-${id}.png`, mimeType: 'image/png', buffer: png });
-      await waitForData(s => s.workspace.panels[id - 1].images.length === 1);
+      await waitForData(s => s.workspace.panels[id - 1].images.length === initialImageCount + 1);
       await saved();
     }
     const beforeReplacement = await read();
     await page.locator('.panel-card').nth(2).click();
     await editor.locator('input[type=file]').setInputFiles({ name: 'replacement.png', mimeType: 'image/png', buffer: png });
-    const afterReplacement = await waitForData(s => s.workspace.panels[2].images.length === 2);
+    const afterReplacement = await waitForData(s => s.workspace.panels[2].images.length === beforeReplacement.workspace.panels[2].images.length + 1);
     for (const index of [0, 1, 3]) {
       assert.deepEqual(afterReplacement.workspace.panels[index], beforeReplacement.workspace.panels[index]);
     }
@@ -121,6 +122,7 @@ fs.mkdirSync(output, { recursive: true });
     await saved();
 
     await page.getByRole('combobox', { name: 'Page layout' }).selectOption('wide');
+    await page.getByRole('dialog', { name: 'Panel and page confirmation' }).getByRole('button', { name: 'Confirm', exact: true }).click();
     await waitForData(s => s.workspace.chapters[0].pages[0].layout === 'Wide');
     assert.equal(await page.locator('.page-panel').count(), 3);
     assert.match(await page.locator('.panel-card').nth(3).innerText(), /Unplaced/);
@@ -128,18 +130,20 @@ fs.mkdirSync(output, { recursive: true });
     await page.getByRole('combobox', { name: 'Page layout' }).selectOption('grid');
     await waitForData(s => s.workspace.chapters[0].pages[0].layout === 'Grid');
     await page.locator('.panel-card').nth(3).click();
-    await editor.getByLabel('Page position').selectOption('3');
+    await editor.getByLabel('Panel placement').selectOption('1:3');
     await waitForData(s => s.workspace.chapters[0].pages[0].slots[3] === 4);
     await saved();
     await page.getByRole('combobox', { name: 'Page layout' }).selectOption('full');
+    await page.getByRole('dialog', { name: 'Panel and page confirmation' }).getByRole('button', { name: 'Confirm', exact: true }).click();
     await waitForData(s => s.workspace.chapters[0].pages[0].layout === 'Full');
     assert.equal(await page.locator('.page-panel').count(), 1);
     assert.equal((await read()).workspace.panels.length, 4);
     await page.getByRole('combobox', { name: 'Page layout' }).selectOption('grid');
     await waitForData(s => s.workspace.chapters[0].pages[0].layout === 'Grid');
     for (let id = 2; id <= 4; id++) {
+      const initialImageCount = (await read()).workspace.panels[id - 1].images.length;
       await page.locator('.panel-card').nth(id - 1).click();
-      await editor.getByLabel('Page position').selectOption(String(id - 1));
+      await editor.getByLabel('Panel placement').selectOption(`1:${id - 1}`);
       await waitForData(s => s.workspace.chapters[0].pages[0].slots[id - 1] === id);
     }
     await saved();

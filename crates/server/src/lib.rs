@@ -2,6 +2,7 @@ pub mod auth;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod references;
 pub mod storage;
 
 use axum::{
@@ -42,6 +43,11 @@ pub fn router(state: AppState, access: auth::Access, public: PathBuf) -> Router 
             "/api/projects/{project}/panels/{panel}/images",
             post(upload_project),
         )
+        .route(
+            "/api/projects/{project}/assets/{asset}/references",
+            post(references::upload),
+        )
+        .route("/references/{name}", get(references::image))
         .route("/api/panels/{id}/images", post(upload))
         .route("/images/{name}", get(image))
         .layer(DefaultBodyLimit::max(MAX_IMAGE_BYTES + 64 * 1024))
@@ -282,7 +288,8 @@ async fn image(
 }
 
 pub async fn reconcile(state: &AppState) -> Result<usize, ApiError> {
-    let keys = db::reconciliation_keys(&state.db).await?;
+    let mut keys = db::reconciliation_keys(&state.db).await?;
+    keys.extend(references::reconciliation_keys(&state.db).await?);
     let mut count = 0;
     for key in keys {
         state.images.delete(&key).await?;

@@ -115,7 +115,7 @@ async function browserWorkflow() {
     assert((await read(first)).workspace.panels.every(panel => panel.action === '' && panel.dialogue === '' && panel.images.length === 0), 'A new project must contain blank planning panels');
     await page.getByLabel('Project title', { exact: true }).fill(firstName);
     await page.getByLabel('Project description', { exact: true }).fill('A revised description.');
-    await editor().getByLabel('Action & composition').fill('Only project A contains this action.');
+    await editor().getByLabel('Action').fill('Only project A contains this action.');
     await waitForData(first, s => s.workspace.title === firstName && s.description === 'A revised description.' && s.workspace.panels[0].action === 'Only project A contains this action.');
     await saved();
     await page.reload();
@@ -140,7 +140,7 @@ async function browserWorkflow() {
     await projects().click();
     const second = await create(secondName, 'Project B stays separate.');
     assert.notEqual(first, second);
-    await editor().getByLabel('Action & composition').fill('Only project B contains this action.');
+    await editor().getByLabel('Action').fill('Only project B contains this action.');
     await waitForData(second, s => s.workspace.panels[0].action === 'Only project B contains this action.');
     await saved();
     const secondBytes = await picture('#854422');
@@ -163,7 +163,7 @@ async function browserWorkflow() {
     await page.getByLabel('Project title', { exact: true }).waitFor();
     await saved();
     assert.equal(new URL(page.url()).searchParams.get('project'), first);
-    assert.equal(await editor().getByLabel('Action & composition').inputValue(), 'Only project A contains this action.');
+    assert.equal(await editor().getByLabel('Action').inputValue(), 'Only project A contains this action.');
 
     // A failed autosave keeps the draft, guards navigation and supports retry.
     await failSave(first);
@@ -294,6 +294,15 @@ async function browserWorkflow() {
           const response = await context.request.get(`${baseURL}${image.url}`);
           assert(response.ok());
           images.push({ url: image.url, digest: digest(await response.body()) });
+        }
+      }
+    }
+    for (const project of projectsBefore) {
+      for (const asset of project.workspace.assets) {
+        for (const reference of asset.reference_images) {
+          const response = await context.request.get(`${baseURL}${reference.url}`);
+          assert(response.ok());
+          images.push({ url: reference.url, digest: digest(await response.body()) });
         }
       }
     }
