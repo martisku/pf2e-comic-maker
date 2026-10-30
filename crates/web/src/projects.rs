@@ -144,6 +144,7 @@ pub struct Session {
     pub state: Signal<Option<ProjectSnapshot>>,
     pub dirty: Signal<bool>,
     pub busy: Signal<bool>,
+    pub backup: Signal<bool>,
     pub status: Signal<String>,
     pub error: Signal<Option<String>>,
     pub uncertain: Signal<bool>,
@@ -189,7 +190,7 @@ impl Session {
     }
 
     fn navigate(mut self, navigation: Navigation) {
-        if *self.busy.peek() {
+        if *self.busy.peek() || *self.backup.peek() {
             return;
         }
         if *self.uncertain.peek() {
@@ -211,7 +212,7 @@ impl Session {
     }
 
     fn activate(mut self, navigation: Navigation) {
-        if *self.busy.peek() {
+        if *self.busy.peek() || *self.backup.peek() {
             return;
         }
         self.pending.set(None);
@@ -273,6 +274,18 @@ impl Session {
         }
     }
 
+    pub fn open_restored(mut self, snapshot: ProjectSnapshot) {
+        let target = Target::Open(snapshot.project_id.clone());
+        self.generation.set(self.activation() + 1);
+        self.state.set(Some(snapshot));
+        self.dirty.set(false);
+        self.error.set(None);
+        self.uncertain.set(false);
+        self.status.set("Saved".into());
+        self.view.set(target.clone());
+        write_url(&target, true);
+    }
+
     pub fn current(self) {
         if let Some(snapshot) = self.state.peek().as_ref() {
             self.request(Target::Open(snapshot.project_id.clone()));
@@ -319,6 +332,7 @@ pub fn use_session() -> Session {
         state: use_signal(|| None),
         dirty: use_signal(|| false),
         busy: use_signal(|| false),
+        backup: use_signal(|| false),
         status: use_signal(|| "Loading project…".into()),
         error: use_signal(|| None),
         uncertain: use_signal(|| false),
@@ -419,8 +433,12 @@ pub fn use_session() -> Session {
     });
     let events = use_hook(move || Rc::new(BrowserEvents::new(session)));
     use_effect(move || {
-        events
-            .set_unsaved(*session.dirty.read() || *session.busy.read() || *session.uncertain.read())
+        events.set_unsaved(
+            *session.dirty.read()
+                || *session.busy.read()
+                || *session.backup.read()
+                || *session.uncertain.read(),
+        )
     });
     session
 }
@@ -434,7 +452,11 @@ struct BrowserEvents {
 impl BrowserEvents {
     fn new(session: Session) -> Self {
         let unload = Closure::new(move |event: web_sys::BeforeUnloadEvent| {
-            if *session.dirty.peek() || *session.busy.peek() || *session.uncertain.peek() {
+            if *session.dirty.peek()
+                || *session.busy.peek()
+                || *session.backup.peek()
+                || *session.uncertain.peek()
+            {
                 event.prevent_default();
                 #[allow(deprecated)]
                 event.set_return_value("");
@@ -543,6 +565,7 @@ pub fn ProjectList(session: Session) -> Element {
             h1 { "Your projects" }
             p { "Each project keeps its own panels, images and planning notes." }
             button { class: "primary-button", disabled: (session.busy)(), onclick: move |_| session.request(Target::New), "New project" }
+            crate::backup::RestoreBackup { session }
             match projects.read().as_ref() {
                 None => rsx! { p { role: "status", "Loading projects…" } },
                 Some(Err(message)) => rsx! { div { role: "alert", "{message}" button { onclick: move |_| projects.restart(), "Retry project list" } } },

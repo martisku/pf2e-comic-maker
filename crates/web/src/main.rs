@@ -1,4 +1,5 @@
 mod assets;
+mod backup;
 mod chapters;
 mod panels;
 mod projects;
@@ -182,8 +183,9 @@ fn App() -> Element {
             } else if session.invalid() {
                 div { class: "loading", "Choose Projects to open your saved work." }
             } else if let Some(workspace) = workspace {
-                fieldset { class: "workspace-fields", disabled: session.loading() || (session.uncertain)(),
+                fieldset { class: "workspace-fields", disabled: session.loading() || (session.uncertain)() || (session.backup)(),
 
+                backup::ExportBackup { session }
                 section { class: "project-heading",
                     div { p { class: "eyebrow", "YOUR ILLUSTRATED STORY" }
                         h1 { if overview() { "Your story, unfolding." } else { "The story takes shape." } }

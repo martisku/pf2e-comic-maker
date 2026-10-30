@@ -26,15 +26,13 @@ there instead of maintaining a second, divergent Codex-specific rule file.
 
 ## Current baseline
 
-F01 project management was merged in [PR #4](https://github.com/martisku/pf2e-comic-maker/pull/4)
-on 2026-10-23. It includes independent projects, names/descriptions, guarded
-autosave/navigation and isolated image/revision storage. Each project still has
-one composition page and exactly four panels. F01 remains **Partial** against
-the complete milestone; see the feature-status table for dependent criteria.
-The next proposed work is to **plan F02 chapter management and F04 assets in
-parallel**, agreeing shared contracts before implementation. See
-[parallel delivery](parallel-feature-delivery.md). Approved requirements do not
-authorize implementation of missing plans.
+The baseline includes independent projects, chapter management, shared assets,
+full panel planning, multiple pages and visual references (PRs #4, #7 and #8).
+Project documents use schema v3; old stored documents migrate on reading while
+old-format writes are rejected. Panel and reference uploads have separate durable
+catalogs. F07 browser backup/restore is implemented; see its
+[requirement](../requirements/project-backup.md) and the feature-status table.
+Do not start from earlier feature branches after a squash merge.
 
 The public service URL is <https://pf2e-comic-maker.onrender.com>.
 Repository verification, a merged PR and a live deployment are separate facts.
@@ -50,6 +48,7 @@ Check current Actions/Render status before reporting a release as live.
 | HTTP routes and image validation | `crates/server/src/lib.rs` |
 | Transactions, revisions and project persistence | `crates/server/src/db.rs` |
 | Login, origin and runtime configuration | `crates/server/src/auth.rs`, `config.rs` |
+| Backup format, restore publication and cleanup | `crates/server/src/backup.rs`, `crates/web/src/backup.rs`, migration 0005 |
 | Image object storage | `crates/server/src/storage.rs` |
 | Additive schema changes | `crates/server/migrations/` |
 | Database/object-store failure tests | `crates/server/tests/persistence.rs` |
@@ -83,6 +82,10 @@ and fresh-container retention. Use the exact setup, environment and cleanup in
 Browser tooling is Playwright **1.56.1** with bundled Chromium; screenshots and
 failure diagnostics are retained as `browser-verification` artifacts for seven days.
 Smoke tests mutate data: use only disposable services, never the public app.
+In `container-smoke.sh`, run every other mutating fixture suite (including backup)
+before `project-smoke.cjs`: it captures the exact list and contents of all projects
+for restart retention. Keep that equality check strict. Run the complete wrapper
+when changing its orchestration; isolated suite runs missed this dependency in F07.
 
 For documentation-only changes, check links, paths, whitespace and consistency;
 there is no need to install Rust or repeat the application suite solely for prose.
@@ -125,3 +128,19 @@ Before handing off, update the affected feature-status row and plan evidence.
 Include the commit/PR, checks actually run, remaining acceptance criteria and
 deployment state. Update this guide when entry points or commands change;
 keep detailed feature progress in `docs/feature-status.md`.
+
+## F07 invariants
+
+- `.comicbackup` v1 accepts workspace schema v3 only; keep strict nested validation
+  and exact descriptor/payload coverage. Limits are 256 MiB total, 8 MiB manifest,
+  1,000 images and 20,000,000 bytes per image. Acquire the backup semaphore before
+  collecting input; hold it through blocking validation or streamed download.
+- Commit immutable candidate cleanup keys before taking the restore journal lock.
+  Publish the new project, image catalogs and ready state in one transaction.
+  Never overwrite a source project or reuse failed-attempt keys on retry.
+- Keep cleanup tombstones revisitable for late PUTs and rotate cleanup fairly.
+  A ready retry returns the current restored copy without overwriting its edits.
+- Use `scripts/backup-smoke.cjs` for full milestone roundtrip and its retention
+  mode after replacing the runtime. Run only against disposable storage.
+- Apply migration 0005 before testing routes. A missing migration can surface as
+  HTTP 503; distinguish test setup errors from archive validation failures.
