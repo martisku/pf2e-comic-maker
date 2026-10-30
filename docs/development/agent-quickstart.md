@@ -82,6 +82,10 @@ and fresh-container retention. Use the exact setup, environment and cleanup in
 Browser tooling is Playwright **1.56.1** with bundled Chromium; screenshots and
 failure diagnostics are retained as `browser-verification` artifacts for seven days.
 Smoke tests mutate data: use only disposable services, never the public app.
+In `container-smoke.sh`, run every other mutating fixture suite (including backup)
+before `project-smoke.cjs`: it captures the exact list and contents of all projects
+for restart retention. Keep that equality check strict. Run the complete wrapper
+when changing its orchestration; isolated suite runs missed this dependency in F07.
 
 For documentation-only changes, check links, paths, whitespace and consistency;
 there is no need to install Rust or repeat the application suite solely for prose.

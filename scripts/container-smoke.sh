@@ -42,8 +42,9 @@ wait_ready
 node scripts/browser-smoke.cjs
 node scripts/chapter-assets-smoke.cjs
 node scripts/panels-references-smoke.cjs
-node scripts/project-smoke.cjs
 node scripts/backup-smoke.cjs
+# Capture all projects only after every other fixture suite has finished mutating data.
+node scripts/project-smoke.cjs
 curl --silent --show-error --fail --user comic:disposable-test-password-only \
     http://127.0.0.1:10000/api/workspace -o "$smoke_tmp_dir/comic-before.json"
 image_url=$(node -e 'const s=JSON.parse(require("fs").readFileSync(process.argv[1])); const image=s.workspace.panels[0].images[0]; if (!image || !/^\/images\/[0-9a-f-]+\.(png|jpg|webp)$/.test(image.url)) process.exit(1); console.log(image.url)' "$smoke_tmp_dir/comic-before.json")

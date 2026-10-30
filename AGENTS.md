@@ -94,6 +94,8 @@ When implementing an approved plan:
 7. Review the final diff against the acceptance criteria.
 
 Never claim validation succeeded unless it was actually run.
+When changing smoke orchestration, run the complete wrapper on disposable services.
+Individual suite passes do not verify fixture ordering or retention snapshots.
 
 ## Documentation
 

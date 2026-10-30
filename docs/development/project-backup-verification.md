@@ -2,7 +2,8 @@
 
 Verified on `feature/project-backup-restore` (2026-10-25), based on checkpoint
 `f39202a` plus the working-tree archive/persistence tests and smoke fixture fix.
-The final commit must include these changes; this report does not claim CI results.
+The original checks below preceded CI; see the orchestration correction below
+for the subsequent CI failure and fix.
 No live deployment is implied.
 
 ## Automated coverage
@@ -66,3 +67,34 @@ Screenshots are local ignored artifacts: `artifacts/backup-phone.png` and
 also in `artifacts/`. The retention fixture and downloaded archive are local test
 artifacts, not repository or production data. Logs for this run are in
 `/tmp/f07-{native,persistence,web-build,backup-browser,regressions,retention}.log`.
+
+## CI orchestration correction (2026-10-30)
+
+PR #9 at `235ca3e` failed [Actions run 40891448701](https://github.com/martisku/pf2e-comic-maker/actions/runs/40891448701),
+job `123509041570`, after builds, unit tests, lint, persistence integrations and
+all five browser workflows passed. The project retention assertion at
+`scripts/project-smoke.cjs:21` correctly found two additional backup milestone
+projects: the wrapper had captured its all-project baseline before the backup
+workflow created its source and restored copy. The earlier individual browser
+and retention runs did not reproduce the wrapper's ordering, so their success
+did not establish that the complete CI wrapper passed.
+
+The wrapper now runs backup before project smoke, after the other mutating
+fixtures and before the final all-project snapshot. The exact project-list,
+complete project snapshot and original-byte comparisons remain unchanged.
+Panel/reference and backup retention fixtures describe their own projects;
+the later project workflow creates separate projects and does not edit those
+fixtures. Future orchestration changes must run the complete wrapper against
+disposable services.
+
+The corrected `bash scripts/container-smoke.sh` passed end to end locally on
+2026-10-30 at `235ca3e` plus this ordering/documentation fix: all five browser
+workflows, fresh-container workspace/image comparisons and all three retention
+modes, including exact all-project equality. This run reused the verified
+`comic-f07-minimal:local` runtime image as `comic-runtime:ci` and existing
+disposable PostgreSQL/S3 services. Temporary Docker proxy defaults excluded
+local hosts in both proxy variable cases. Local tooling was Playwright 1.62.1
+and system Chromium 154, rather than CI's pinned Playwright 1.56.1/bundled browser.
+The log is `/tmp/f07-ci-wrapper.log`. `bash -n scripts/container-smoke.sh` and
+`git diff --check` also passed. A new CI result remains separate from this local
+verification; no production build or deployment was performed for this fix.
